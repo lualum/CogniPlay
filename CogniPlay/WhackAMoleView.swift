@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-// MARK: - Whack-a-Mole Game View
+// MARK: - Whack-a-Mole View
 struct WhackAMoleView: View {
     @Binding var currentView: ContentView.AppView
     @State private var moles: [Bool] = Array(repeating: false, count: 12)
