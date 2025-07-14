@@ -1,189 +1,289 @@
-//
-//  SpeechView.swift
-//  CogniPlay
-//
-//  Created by Lucas Lum on 6/29/25.
-//
-
 import SwiftUI
 import AVFoundation
+import Foundation
 
-// MARK: - Audio Recorder
+// MARK: - Response Models
+struct DementiaDetectionResponse: Codable {
+    let predicted_label: String
+    let confidence: Double
+    let all_scores: [ScoreItem]
+}
+
+struct ScoreItem: Codable {
+    let label: String
+    let score: Double
+}
+
+// MARK: - Audio Recorder Class
 class AudioRecorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
     @Published var isRecording = false
-    @Published var recordingTime = "00:00"
-    @Published var audioData: Data?
-    @Published var permissionGranted = false
+    @Published var hasRecording = false
     
     private var audioRecorder: AVAudioRecorder?
-    private var recordingTimer: Timer?
-    private var startTime: Date?
+    var audioURL: URL?
     
     override init() {
         super.init()
-        checkPermissions()
-    }
-    
-    private func checkPermissions() {
-        if #available(iOS 17.0, *) {
-            AVAudioApplication.requestRecordPermission { [weak self] granted in
-                DispatchQueue.main.async {
-                    self?.permissionGranted = granted
-                    if granted {
-                        self?.setupAudioSession()
-                    }
-                }
-            }
-        } else {
-            AVAudioSession.sharedInstance().requestRecordPermission { [weak self] granted in
-                DispatchQueue.main.async {
-                    self?.permissionGranted = granted
-                    if granted {
-                        self?.setupAudioSession()
-                    }
-                }
-            }
-        }
+        setupAudioSession()
     }
     
     private func setupAudioSession() {
         do {
-            let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(.record, mode: .default)
-            try audioSession.setActive(true)
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playAndRecord, mode: .default)
+            try session.setActive(true)
         } catch {
-            print("Failed to setup audio session: \(error)")
+            print("Failed to setup audio session: \(error.localizedDescription)")
+        }
+    }
+    
+    func requestPermission() {
+        if #available(iOS 17.0, *) {
+            AVAudioApplication.requestRecordPermission { granted in
+                DispatchQueue.main.async {
+                    if !granted {
+                        print("Audio recording permission denied")
+                    }
+                }
+            }
+        } else {
+            // Fallback for iOS 16 and earlier
+            AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                DispatchQueue.main.async {
+                    if !granted {
+                        print("Audio recording permission denied")
+                    }
+                }
+            }
         }
     }
     
     func startRecording() {
-        guard !isRecording && permissionGranted else { return }
-        
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let audioURL = documentsPath.appendingPathComponent("recording.wav")
+        let audioFilename = documentsPath.appendingPathComponent("recording.wav")
         
         let settings = [
             AVFormatIDKey: Int(kAudioFormatLinearPCM),
-            AVSampleRateKey: 16000, // Optimal for wav2vec2
+            AVSampleRateKey: 16000,
             AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsFloatKey: false,
             AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
-        ]
+        ] as [String : Any]
         
         do {
-            audioRecorder = try AVAudioRecorder(url: audioURL, settings: settings)
+            audioRecorder = try AVAudioRecorder(url: audioFilename, settings: settings)
             audioRecorder?.delegate = self
             audioRecorder?.record()
             
-            isRecording = true
-            startTime = Date()
-            startTimer()
+            self.audioURL = audioFilename
+            self.isRecording = true
+            self.hasRecording = false
         } catch {
-            print("Failed to start recording: \(error)")
+            print("Could not start recording: \(error.localizedDescription)")
         }
     }
     
     func stopRecording() {
-        guard isRecording else { return }
-        
         audioRecorder?.stop()
-        recordingTimer?.invalidate()
-        
         isRecording = false
-        
-        // Load audio data
-        if let audioURL = audioRecorder?.url {
-            audioData = try? Data(contentsOf: audioURL)
-        }
+        hasRecording = audioURL != nil
     }
     
-    private func startTimer() {
-        recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
-            guard let startTime = self.startTime else { return }
-            let elapsed = Date().timeIntervalSince(startTime)
-            
-            if elapsed >= 60 {
-                self.stopRecording()
-            } else {
-                let minutes = Int(elapsed) / 60
-                let seconds = Int(elapsed) % 60
-                self.recordingTime = String(format: "%02d:%02d", minutes, seconds)
-            }
+    // MARK: - AVAudioRecorderDelegate
+    func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
+        if flag {
+            hasRecording = true
         }
     }
 }
 
-// MARK: - Hugging Face Client (Simplified)
-class HuggingFaceClient: ObservableObject {
-    private let apiKey: String
-    private let modelName = "cogniplayapp/wav2vec2-large-xls-r-300m-dm32"
-    private let baseURL = "https://api-inference.huggingface.co/models/"
+// MARK: - Enhanced Hugging Face Service Class
+class HuggingFaceService: ObservableObject {
+    private let apiKey = "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"
+    private let apiURL = "https://wpa4x28892l5a6i5.us-east-1.aws.endpoints.huggingface.cloud"
     
-    @Published var isProcessing = false
-    @Published var transcription = ""
-    @Published var errorMessage = ""
-    
-    init(apiKey: String) {
-        self.apiKey = apiKey
-    }
-    
-    func processAudio(audioData: Data) async {
-        await MainActor.run {
-            isProcessing = true
-            errorMessage = ""
-            transcription = ""
+    func validateAPIKey() async throws -> Bool {
+        // Test the API connection with a simple request
+        guard !apiKey.isEmpty else {
+            return false
         }
         
+        // Create a minimal test request to check if the endpoint is accessible
+        var request = URLRequest(url: URL(string: apiURL)!)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // Send a minimal test payload
+        let testPayload = [
+            "inputs": [
+                "audio": "dGVzdA==" // Base64 for "test"
+            ]
+        ]
+        
         do {
-            guard let url = URL(string: baseURL + modelName) else {
-                await MainActor.run {
-                    errorMessage = "Invalid URL"
-                    isProcessing = false
-                }
-                return
+            let jsonData = try JSONSerialization.data(withJSONObject: testPayload)
+            request.httpBody = jsonData
+            
+            let (_, response) = try await URLSession.shared.data(for: request)
+            
+            if let httpResponse = response as? HTTPURLResponse {
+                print("API Validation Status Code: \(httpResponse.statusCode)")
+                // Accept various status codes that indicate the API is accessible
+                // 200: Success, 400: Bad request but API is working, 422: Validation error but API is accessible
+                return httpResponse.statusCode == 200 || httpResponse.statusCode == 400 || httpResponse.statusCode == 422
             }
             
-            var request = URLRequest(url: url)
-            request.httpMethod = "POST"
-            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-            request.setValue("audio/wav", forHTTPHeaderField: "Content-Type")
-            request.httpBody = audioData
-            
+            return false
+        } catch {
+            print("API Validation Error: \(error)")
+            return false
+        }
+    }
+    
+    func detectDementia(audioURL: URL) async throws -> DementiaDetectionResponse {
+        guard !apiKey.isEmpty else {
+            throw TranscriptionError.invalidAPIKey
+        }
+        
+        guard let audioData = try? Data(contentsOf: audioURL) else {
+            throw TranscriptionError.invalidAudioFile
+        }
+        
+        // Convert audio data to base64
+        let base64AudioData = audioData.base64EncodedString()
+        
+        // Create request payload
+        let requestBody = [
+            "inputs": [
+                "audio": base64AudioData
+            ]
+        ]
+        
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: requestBody) else {
+            throw TranscriptionError.invalidRequest
+        }
+        
+        var request = URLRequest(url: URL(string: apiURL)!)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = jsonData
+        
+        do {
             let (data, response) = try await URLSession.shared.data(for: request)
             
             guard let httpResponse = response as? HTTPURLResponse else {
-                await MainActor.run {
-                    errorMessage = "Invalid response"
-                    isProcessing = false
+                throw TranscriptionError.invalidResponse
+            }
+            
+            print("API Response Status Code: \(httpResponse.statusCode)")
+            
+            if httpResponse.statusCode != 200 {
+                // Try to parse error message
+                if let errorString = String(data: data, encoding: .utf8) {
+                    print("API Error Response: \(errorString)")
                 }
-                return
+                throw TranscriptionError.apiError("API returned status code: \(httpResponse.statusCode)")
+            }
+            
+            // Print raw response for debugging
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("Raw API Response: \(responseString)")
+            }
+            
+            // Parse the response
+            do {
+                // The API returns an array, so we need to decode it as such
+                let responses = try JSONDecoder().decode([DementiaDetectionResponse].self, from: data)
+                
+                guard let firstResponse = responses.first else {
+                    throw TranscriptionError.invalidResponse
+                }
+                
+                return firstResponse
+                
+            } catch let decodingError {
+                print("JSON Decoding Error: \(decodingError)")
+                throw TranscriptionError.invalidResponse
+            }
+            
+        } catch {
+            print("Network Error: \(error)")
+            throw TranscriptionError.networkError(error.localizedDescription)
+        }
+    }
+    
+    // Keep the original transcription method as backup
+    func transcribeAudio(audioURL: URL) async throws -> String {
+        guard !apiKey.isEmpty else {
+            throw TranscriptionError.invalidAPIKey
+        }
+        
+        guard let audioData = try? Data(contentsOf: audioURL) else {
+            throw TranscriptionError.invalidAudioFile
+        }
+        
+        let whisperURL = "https://api-inference.huggingface.co/models/openai/whisper-base"
+        var request = URLRequest(url: URL(string: whisperURL)!)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("audio/wav", forHTTPHeaderField: "Content-Type")
+        request.httpBody = audioData
+        
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw TranscriptionError.invalidResponse
             }
             
             if httpResponse.statusCode != 200 {
-                await MainActor.run {
-                    errorMessage = "API Error: \(httpResponse.statusCode)"
-                    isProcessing = false
-                }
-                return
+                throw TranscriptionError.apiError("API returned status code: \(httpResponse.statusCode)")
             }
             
             if let result = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let text = result["text"] as? String {
-                await MainActor.run {
-                    transcription = text
-                    isProcessing = false
-                }
+                return text
             } else {
-                await MainActor.run {
-                    errorMessage = "Failed to parse response"
-                    isProcessing = false
+                // Try to parse as direct string response
+                if let text = String(data: data, encoding: .utf8) {
+                    return text
+                } else {
+                    throw TranscriptionError.invalidResponse
                 }
             }
-            
         } catch {
-            await MainActor.run {
-                errorMessage = error.localizedDescription
-                isProcessing = false
-            }
+            throw TranscriptionError.networkError(error.localizedDescription)
+        }
+    }
+}
+
+// MARK: - Updated Error Types
+enum TranscriptionError: Error, LocalizedError {
+    case invalidAPIKey
+    case invalidAudioFile
+    case invalidResponse
+    case invalidRequest
+    case apiError(String)
+    case networkError(String)
+    
+    var errorDescription: String? {
+        switch self {
+        case .invalidAPIKey:
+            return "Invalid or missing API key"
+        case .invalidAudioFile:
+            return "Could not read audio file"
+        case .invalidResponse:
+            return "Invalid response from API"
+        case .invalidRequest:
+            return "Could not create request"
+        case .apiError(let message):
+            return "API Error: \(message)"
+        case .networkError(let message):
+            return "Network Error: \(message)"
         }
     }
 }
@@ -192,10 +292,22 @@ class HuggingFaceClient: ObservableObject {
 struct SpeechView: View {
     @Binding var currentView: ContentView.AppView
     @StateObject private var audioRecorder = AudioRecorder()
-    @StateObject private var huggingFaceClient = HuggingFaceClient(apiKey: "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") // Replace with your API key
+    @StateObject private var huggingFaceService = HuggingFaceService()
+    @State private var recordingTime = "00:00"
+    @State private var timer: Timer?
+    @State private var recordingDuration: TimeInterval = 0
+    @State private var transcription = ""
+    @State private var dementiaResult: DementiaDetectionResponse?
+    @State private var isProcessing = false
+    @State private var errorMessage = ""
+    @State private var showError = false
+    @State private var apiKeyValid = false
+    @State private var processingMode: ProcessingMode = .dementia
     
-    @State private var showingResults = false
-    @State private var hasRecorded = false
+    enum ProcessingMode {
+        case dementia
+        case transcription
+    }
     
     var body: some View {
         VStack(spacing: 0) {
@@ -203,173 +315,392 @@ struct SpeechView: View {
             
             // Title
             VStack(spacing: 5) {
-                Text("Speech")
+                Text("Speech Analysis")
                     .font(.largeTitle)
                     .fontWeight(.bold)
                 
-                Text("Talk About Image")
+                Text("Dementia Detection")
                     .font(.title2)
                     .fontWeight(.medium)
-                    .foregroundColor(.black)
+                    .foregroundColor(.primary)
             }
             .padding(.bottom, 30)
             
             // Image placeholder
             Rectangle()
-                .fill(Color.white)
-                .stroke(Color.black, lineWidth: 1)
+                .fill(Color(.systemBackground))
+                .stroke(Color.primary, lineWidth: 1)
                 .frame(width: 280, height: 200)
                 .overlay(
                     VStack {
-                        Text("Image content would appear here")
+                        Image(systemName: "brain.head.profile")
+                            .font(.system(size: 40))
+                            .foregroundColor(.blue)
+                        Text("Voice Analysis")
                             .font(.caption)
-                            .foregroundColor(.gray)
-                        Text("(Kitchen scene with family)")
+                            .foregroundColor(.secondary)
+                        Text("(Dementia Detection)")
                             .font(.caption2)
-                            .foregroundColor(.gray)
+                            .foregroundColor(.secondary)
                     }
                 )
-                .padding(.bottom, 40)
+                .padding(.bottom, 20)
+            
+            // Processing mode selector
+            Picker("Processing Mode", selection: $processingMode) {
+                Text("Dementia Detection").tag(ProcessingMode.dementia)
+                Text("Transcription").tag(ProcessingMode.transcription)
+            }
+            .pickerStyle(SegmentedPickerStyle())
+            .padding(.horizontal, 20)
+            .padding(.bottom, 20)
+            
+            // Error display
+            if showError {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Error:")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.red)
+                    
+                    Text(errorMessage)
+                        .font(.body)
+                        .padding()
+                        .background(Color.red.opacity(0.1))
+                        .cornerRadius(8)
+                        .foregroundColor(.red)
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
+            }
+            
+            // Results display
+            if let result = dementiaResult {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Dementia Detection Result:")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.blue)
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Prediction:")
+                                .fontWeight(.medium)
+                            Text(result.predicted_label.capitalized)
+                                .fontWeight(.bold)
+                                .foregroundColor(result.predicted_label.lowercased() == "dementia" ? .red : .green)
+                        }
+                        
+                        HStack {
+                            Text("Confidence:")
+                                .fontWeight(.medium)
+                            Text("\(String(format: "%.1f", result.confidence * 100))%")
+                                .fontWeight(.bold)
+                        }
+                        
+                        Text("All Scores:")
+                            .fontWeight(.medium)
+                            .padding(.top, 5)
+                        
+                        ForEach(result.all_scores, id: \.label) { score in
+                            HStack {
+                                Text("• \(score.label.capitalized):")
+                                Spacer()
+                                Text("\(String(format: "%.1f", score.score * 100))%")
+                                    .fontWeight(.medium)
+                            }
+                            .padding(.leading, 10)
+                        }
+                    }
+                    .padding()
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(8)
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
+            }
+            
+            // Transcription display
+            if !transcription.isEmpty {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Transcription:")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.green)
+                    
+                    Text(transcription)
+                        .font(.body)
+                        .padding()
+                        .background(Color.green.opacity(0.1))
+                        .cornerRadius(8)
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
+            }
             
             // Recording controls
             VStack(spacing: 20) {
-                // Permission message
-                if !audioRecorder.permissionGranted {
-                    VStack(spacing: 10) {
-                        Image(systemName: "mic.slash")
-                            .font(.system(size: 30))
-                            .foregroundColor(.red)
-                        Text("Microphone permission is required")
-                            .font(.headline)
-                            .foregroundColor(.red)
-                        Text("Please grant microphone access in Settings")
-                            .font(.caption)
-                            .foregroundColor(.gray)
+                // Microphone button
+                Button(action: {
+                    if audioRecorder.isRecording {
+                        stopRecording()
+                    } else {
+                        startRecording()
                     }
-                    .padding()
-                    .background(Color.red.opacity(0.1))
-                    .cornerRadius(10)
-                    .padding(.horizontal, 30)
-                } else {
-                    // Microphone button
-                    Button(action: {
-                        if audioRecorder.isRecording {
-                            audioRecorder.stopRecording()
-                            hasRecorded = true
-                        } else {
-                            audioRecorder.startRecording()
-                            hasRecorded = false
-                            showingResults = false
-                        }
-                    }) {
-                        Image(systemName: audioRecorder.isRecording ? "mic.fill" : "mic")
-                            .font(.system(size: 40))
-                            .foregroundColor(.white)
-                            .frame(width: 80, height: 80)
-                            .background(audioRecorder.isRecording ? Color.red : Color.black)
-                            .clipShape(Circle())
-                            .scaleEffect(audioRecorder.isRecording ? 1.1 : 1.0)
-                            .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: audioRecorder.isRecording)
+                }) {
+                    Image(systemName: audioRecorder.isRecording ? "mic.fill" : "mic")
+                        .font(.system(size: 40))
+                        .foregroundColor(.white)
+                        .frame(width: 80, height: 80)
+                        .background(audioRecorder.isRecording ? Color.red : Color.blue)
+                        .clipShape(Circle())
+                        .scaleEffect(audioRecorder.isRecording ? 1.1 : 1.0)
+                        .animation(.easeInOut(duration: 0.1), value: audioRecorder.isRecording)
+                }
+                .disabled(isProcessing)
+                
+                // Timer
+                Text(recordingTime)
+                    .font(.title2)
+                    .fontWeight(.medium)
+                    .foregroundColor(audioRecorder.isRecording ? .red : .primary)
+                
+                // Processing indicator
+                if isProcessing {
+                    HStack {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle())
+                        Text("Processing audio...")
+                            .font(.body)
+                            .foregroundColor(.secondary)
                     }
-                    
-                    // Timer
-                    Text(audioRecorder.recordingTime + " / 1:00")
+                }
+                
+                // API Status indicator
+                HStack {
+                    Circle()
+                        .fill(apiKeyValid ? Color.green : Color.red)
+                        .frame(width: 8, height: 8)
+                    Text(apiKeyValid ? "API Connected" : "API Disconnected")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                // Submit button
+                Button(action: {
+                    if audioRecorder.hasRecording {
+                        processAudio()
+                    }
+                }) {
+                    Text(isProcessing ? "Processing..." : "Analyze Audio")
                         .font(.title2)
                         .fontWeight(.medium)
-                    
-                    // Process button (only show when recording is done)
-                    if hasRecorded && !audioRecorder.isRecording {
-                        Button(action: {
-                            processAudio()
-                        }) {
-                            HStack {
-                                if huggingFaceClient.isProcessing {
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                        .scaleEffect(0.8)
-                                    Text("Processing...")
-                                } else {
-                                    Text("Process Speech")
-                                }
-                            }
-                            .font(.title2)
-                            .fontWeight(.medium)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 50)
-                            .background(Color.blue.opacity(0.7))
-                            .cornerRadius(10)
-                        }
-                        .disabled(huggingFaceClient.isProcessing)
-                        .padding(.horizontal, 30)
-                    }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(audioRecorder.hasRecording && !isProcessing ? Color.blue : Color.gray.opacity(0.7))
+                        .cornerRadius(10)
                 }
+                .padding(.horizontal, 30)
+                .disabled(!audioRecorder.hasRecording || isProcessing)
                 
-                // Results display
-                if showingResults {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Transcription:")
-                            .font(.headline)
-                            .foregroundColor(.black)
-                        
-                        if !huggingFaceClient.transcription.isEmpty {
-                            ScrollView {
-                                Text(huggingFaceClient.transcription)
-                                    .font(.body)
-                                    .foregroundColor(.black)
-                                    .padding()
-                                    .background(Color.gray.opacity(0.1))
-                                    .cornerRadius(8)
-                            }
-                            .frame(maxHeight: 150)
-                        }
-                        
-                        if !huggingFaceClient.errorMessage.isEmpty {
-                            Text("Error: \(huggingFaceClient.errorMessage)")
-                                .font(.body)
-                                .foregroundColor(.red)
-                                .padding()
-                                .background(Color.red.opacity(0.1))
-                                .cornerRadius(8)
-                        }
-                    }
-                    .padding(.horizontal, 30)
+                // Test API button
+                Button(action: {
+                    testAPIConnection()
+                }) {
+                    Text("Test API Connection")
+                        .font(.body)
+                        .foregroundColor(.blue)
                 }
-                
-                // Submit button (only show when we have results)
-                if showingResults && !huggingFaceClient.transcription.isEmpty {
-                    Button(action: {
-                        currentView = .home
-                    }) {
-                        Text("Submit")
-                            .font(.title2)
-                            .fontWeight(.medium)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 50)
-                            .background(Color.green.opacity(0.7))
-                            .cornerRadius(10)
-                    }
-                    .padding(.horizontal, 30)
-                }
+                .disabled(isProcessing)
             }
             
             Spacer()
         }
-        .background(Color.white)
+        .background(Color(.systemBackground))
+        .onAppear {
+            requestPermissionsAndSetup()
+        }
+        .onDisappear {
+            cleanup()
+        }
+    }
+    
+    // MARK: - Setup and Cleanup
+    private func requestPermissionsAndSetup() {
+        audioRecorder.requestPermission()
+        testAPIConnection()
+    }
+    
+    private func cleanup() {
+        stopRecording()
+        timer?.invalidate()
+        timer = nil
+    }
+    
+    // MARK: - Recording Functions
+    private func startRecording() {
+        // Reset states
+        recordingDuration = 0
+        updateTimer()
+        transcription = ""
+        dementiaResult = nil
+        errorMessage = ""
+        showError = false
+        
+        // Start recording
+        audioRecorder.startRecording()
+        
+        // Start timer
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            recordingDuration += 1
+            updateTimer()
+        }
+    }
+    
+    private func stopRecording() {
+        timer?.invalidate()
+        timer = nil
+        audioRecorder.stopRecording()
+    }
+    
+    private func updateTimer() {
+        let minutes = Int(recordingDuration) / 60
+        let seconds = Int(recordingDuration) % 60
+        recordingTime = String(format: "%02d:%02d", minutes, seconds)
+    }
+    
+    // MARK: - API Functions
+    private func testAPIConnection() {
+        Task {
+            do {
+                let isValid = try await huggingFaceService.validateAPIKey()
+                await MainActor.run {
+                    self.apiKeyValid = isValid
+                    if !isValid {
+                        self.showError = true
+                        self.errorMessage = "API key validation failed. Please check your Hugging Face API key."
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.apiKeyValid = false
+                    self.showError = true
+                    self.errorMessage = "Failed to connect to Hugging Face API: \(error.localizedDescription)"
+                }
+            }
+        }
     }
     
     private func processAudio() {
-        guard let audioData = audioRecorder.audioData else {
-            huggingFaceClient.errorMessage = "No audio data available"
+        guard let audioURL = audioRecorder.audioURL else {
+            showError = true
+            errorMessage = "No audio file found"
             return
         }
         
+        print("Processing audio file: \(audioURL.path)")
+        printAudioFileInfo(url: audioURL)
+        
+        isProcessing = true
+        showError = false
+        errorMessage = ""
+        
+        if processingMode == .dementia {
+            processDementiaDetection(audioURL: audioURL)
+        } else {
+            processTranscription(audioURL: audioURL)
+        }
+    }
+    
+    private func processDementiaDetection(audioURL: URL) {
         Task {
-            await huggingFaceClient.processAudio(audioData: audioData)
-            await MainActor.run {
-                showingResults = true
+            do {
+                let result = try await huggingFaceService.detectDementia(audioURL: audioURL)
+                await MainActor.run {
+                    print("DEMENTIA DETECTION RESULT: \(result)")
+                    self.dementiaResult = result
+                    self.transcription = "" // Clear transcription
+                    self.isProcessing = false
+                    self.showError = false
+                    
+                    // Clean up the audio file after processing
+                    self.deleteAudioFile(url: audioURL)
+                }
+            } catch {
+                await MainActor.run {
+                    print("DEMENTIA DETECTION ERROR: \(error.localizedDescription)")
+                    self.isProcessing = false
+                    self.showError = true
+                    self.errorMessage = "Dementia detection failed: \(error.localizedDescription)"
+                    
+                    // Clean up the audio file even on error
+                    self.deleteAudioFile(url: audioURL)
+                }
             }
+        }
+    }
+    
+    private func processTranscription(audioURL: URL) {
+        Task {
+            do {
+                let result = try await huggingFaceService.transcribeAudio(audioURL: audioURL)
+                await MainActor.run {
+                    print("TRANSCRIPTION RESULT: \(result)")
+                    self.transcription = result
+                    self.dementiaResult = nil // Clear dementia result
+                    self.isProcessing = false
+                    self.showError = false
+                    
+                    // Clean up the audio file after processing
+                    self.deleteAudioFile(url: audioURL)
+                }
+            } catch {
+                await MainActor.run {
+                    print("TRANSCRIPTION ERROR: \(error.localizedDescription)")
+                    self.isProcessing = false
+                    self.showError = true
+                    self.errorMessage = "Transcription failed: \(error.localizedDescription)"
+                    
+                    // Clean up the audio file even on error
+                    self.deleteAudioFile(url: audioURL)
+                }
+            }
+        }
+    }
+    
+    // MARK: - Helper Functions
+    private func deleteAudioFile(url: URL) {
+        do {
+            if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.removeItem(at: url)
+                print("Audio file deleted successfully: \(url.path)")
+            }
+        } catch {
+            print("Failed to delete audio file: \(error.localizedDescription)")
+        }
+    }
+    
+    private func printAudioFileInfo(url: URL) {
+        do {
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                print("Audio file does not exist at path: \(url.path)")
+                return
+            }
+            
+            let audioFile = try AVAudioFile(forReading: url)
+            let duration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
+            let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+            let fileSize = attributes[.size] as? Int64 ?? 0
+            
+            print("Audio File Info:")
+            print("- File Path: \(url.path)")
+            print("- Duration: \(String(format: "%.2f", duration)) seconds")
+            print("- File Size: \(fileSize) bytes")
+            print("- Sample Rate: \(audioFile.fileFormat.sampleRate) Hz")
+            print("- Channels: \(audioFile.fileFormat.channelCount)")
+        } catch {
+            print("Error reading audio file info: \(error.localizedDescription)")
         }
     }
 }

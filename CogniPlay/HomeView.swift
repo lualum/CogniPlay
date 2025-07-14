@@ -24,6 +24,24 @@ struct HomeView: View {
                 .padding(.bottom, 40)
             
             VStack(spacing: 20) {
+                // Setup Pattern Button
+                Button(action: {
+                    if termsAccepted {
+                        currentView = .setupPattern
+                    } else {
+                        showingTerms = true
+                    }
+                }) {
+                    Text("Setup Pattern")
+                        .font(.title2)
+                        .fontWeight(.medium)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(Color.green.opacity(0.7))
+                        .cornerRadius(10)
+                }
+                
                 // Speech Button
                 Button(action: {
                     if termsAccepted {
@@ -75,6 +93,24 @@ struct HomeView: View {
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)
                         .background(Color.orange.opacity(0.7))
+                        .cornerRadius(10)
+                }
+                
+                // Test Pattern Button
+                Button(action: {
+                    if termsAccepted {
+                        currentView = .testPattern
+                    } else {
+                        showingTerms = true
+                    }
+                }) {
+                    Text("Test Pattern")
+                        .font(.title2)
+                        .fontWeight(.medium)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(Color.green.opacity(0.7))
                         .cornerRadius(10)
                 }
                 

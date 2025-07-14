@@ -12,34 +12,45 @@ struct ContentView: View {
     @State private var showingTerms = false
     @State private var termsAccepted = false
     @State private var currentView: AppView = .home
+    @State private var currentPattern: [Int] = []
     
     enum AppView {
-        case home, speech, simon, whackAMole
+        case home, setupPattern, speech, simon, whackAMole, testPattern
     }
     
     var body: some View {
-        VStack(spacing: 0) {
-            // Persistent Navigation Bar
-            PersistentNavBar(currentView: $currentView)
+        ZStack {
+            // Background color that extends beyond safe area
+            Color.white
+                .ignoresSafeArea(.all)
             
-            // Main Content
-            Group {
-                switch currentView {
-                case .home:
-                    HomeView(
-                        showingTerms: $showingTerms,
-                        termsAccepted: $termsAccepted,
-                        currentView: $currentView
-                    )
-                case .speech:
-                    SpeechView(currentView: $currentView)
-                case .simon:
-                    SimonView(currentView: $currentView)
-                case .whackAMole:
-                    WhackAMoleView(currentView: $currentView)
+            VStack(spacing: 0) {
+                // Persistent Navigation Bar - extends beyond safe area
+                PersistentNavBar(currentView: $currentView)
+                
+                // Main Content with safe area padding
+                Group {
+                    switch currentView {
+                    case .home:
+                        HomeView(
+                            showingTerms: $showingTerms,
+                            termsAccepted: $termsAccepted,
+                            currentView: $currentView
+                        )
+                    case .setupPattern:
+                        SetupPatternView(currentView: $currentView, currentPattern: $currentPattern)
+                    case .speech:
+                        SpeechView(currentView: $currentView)
+                    case .simon:
+                        SimonView(currentView: $currentView)
+                    case .whackAMole:
+                        WhackAMoleView(currentView: $currentView)
+                    case .testPattern:
+                        TestPatternView(currentView: $currentView, currentPattern: $currentPattern)
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .sheet(isPresented: $showingTerms) {
             TermsOfServiceView(
@@ -55,13 +66,14 @@ struct PersistentNavBar: View {
     @Binding var currentView: ContentView.AppView
     
     var body: some View {
-        HStack {
+        HStack(alignment: .center) {
             Button(action: {
                 currentView = .home
             }) {
                 Image(systemName: "house.fill")
                     .font(.title2)
                     .foregroundColor(.black)
+                    .frame(width: 44, height: 44) // Standard touch target size
             }
             
             Spacer()
@@ -72,16 +84,17 @@ struct PersistentNavBar: View {
                 Image(systemName: "gearshape.fill")
                     .font(.title2)
                     .foregroundColor(.black)
+                    .frame(width: 44, height: 44) // Standard touch target size
             }
         }
+        .frame(height: 44) // Consistent height
         .padding(.horizontal, 20)
-        .padding(.vertical, 15)
+        .padding(.top, 50) // Add top padding to account for status bar and notch
+        .padding(.bottom, 15)
         .background(Color.gray.opacity(0.15))
+        .ignoresSafeArea(.container, edges: .top) // Extend beyond safe area at top
     }
 }
-
-
-
 // MARK: - Terms of Service View
 struct TermsOfServiceView: View {
     @Binding var showingTerms: Bool
@@ -89,30 +102,6 @@ struct TermsOfServiceView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Header with Navigation
-            HStack {
-                Button(action: {
-                    // Home action
-                }) {
-                    Image(systemName: "house.fill")
-                        .font(.title2)
-                        .foregroundColor(.black)
-                }
-                
-                Spacer()
-                
-                Button(action: {
-                    // Settings action
-                }) {
-                    Image(systemName: "gearshape.fill")
-                        .font(.title2)
-                        .foregroundColor(.black)
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 15)
-            .background(Color.gray.opacity(0.15))
-            
             // Terms Content
             VStack(spacing: 20) {
                 Text("Terms of Service")

@@ -7,11 +7,6 @@
 
 import SwiftUI
 
-//let startTime = Date() // Save the start time
-//I/ Later in your code, check how much time has passed
-//let elapsedTime = Date().timelntervalSince(startTime)
-//print ("Elapsed time: \(elapsedTime) seconds")
-
 // MARK: - Simon Game View
 struct SimonView: View {
     @Binding var currentView: ContentView.AppView
