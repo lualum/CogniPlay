@@ -5,21 +5,21 @@
 //  Created by Lucas Lum on 6/29/25.
 //
 
-import SwiftUI
 import Darwin
+import SwiftUI
 
 // MARK: - Setup Pattern Game View
 struct SetupPatternView: View {
     @Binding var currentView: ContentView.AppView
     @Binding var currentPattern: [Int]
-    
+
     @State private var availableShapes: [ShapeItem] = []
     @State private var patternOrder: [ShapeItem] = []
     @State private var draggedShape: ShapeItem?
     @State private var hoveredSlot: Int?
     @State private var selectedShape: ShapeItem?
     @State private var isSelectionMode: Bool = false
-    
+
     var body: some View {
         VStack(spacing: 0) {
             // Header with title
@@ -28,15 +28,24 @@ struct SetupPatternView: View {
                     .font(.largeTitle)
                     .fontWeight(.bold)
                     .foregroundColor(.black)
-                
-                Text("Drag and Drop")
-                    .font(.title2)
-                    .fontWeight(.medium)
-                    .foregroundColor(.black)
-                
+                if isSelectionMode {
+                    Text("Tap Object, then Tap Slot")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                }
+                else {
+                    Text("Drag and Drop")
+                        .font(.title2)
+                        .fontWeight(.medium)
+                        .foregroundColor(.black)
+                }
+
                 // Mode toggle for simulator testing
                 HStack {
-                    Button(isSelectionMode ? "Switch to Drag Mode" : "Switch to Tap Mode") {
+                    Button(
+                        isSelectionMode
+                            ? "Switch to Drag Mode" : "Switch to Tap Mode"
+                    ) {
                         isSelectionMode.toggle()
                         selectedShape = nil
                     }
@@ -47,53 +56,63 @@ struct SetupPatternView: View {
                     .background(Color.blue.opacity(0.1))
                     .cornerRadius(8)
                 }
-                
-                if isSelectionMode {
-                    Text("Tap a shape, then tap a slot")
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                }
             }
             .padding(.top, 40)
-            .padding(.bottom, 60)
-            
+            .padding(.bottom, 20)
+
             Spacer()
-            
+
             // Pattern Order Area - Main drop zones
-            VStack(spacing: 30) {
+            VStack(spacing: 20) {
                 // Top row - 3 slots
                 HStack(spacing: 20) {
                     ForEach(0..<3) { index in
                         PatternDropSlot(
-                            shape: index < patternOrder.count ? patternOrder[index] : nil,
+                            shape: index < patternOrder.count
+                                ? patternOrder[index] : nil,
                             index: index,
                             isHovered: hoveredSlot == index,
                             isSelectionMode: isSelectionMode,
                             onRemove: { removeFromPattern(at: index) },
-                            onDrop: { shape in handleDropInSlot(shape: shape, at: index) },
+                            onDrop: { shape in
+                                handleDropInSlot(shape: shape, at: index)
+                            },
                             onTap: {
-                                if isSelectionMode, let selectedShape = selectedShape {
-                                    handleDropInSlot(shape: selectedShape, at: index)
+                                if isSelectionMode,
+                                    let selectedShape = selectedShape
+                                {
+                                    handleDropInSlot(
+                                        shape: selectedShape,
+                                        at: index
+                                    )
                                     self.selectedShape = nil
                                 }
                             }
                         )
                     }
                 }
-                
+
                 // Bottom row - 2 slots
                 HStack(spacing: 20) {
                     ForEach(3..<5) { index in
                         PatternDropSlot(
-                            shape: index < patternOrder.count ? patternOrder[index] : nil,
+                            shape: index < patternOrder.count
+                                ? patternOrder[index] : nil,
                             index: index,
                             isHovered: hoveredSlot == index,
                             isSelectionMode: isSelectionMode,
                             onRemove: { removeFromPattern(at: index) },
-                            onDrop: { shape in handleDropInSlot(shape: shape, at: index) },
+                            onDrop: { shape in
+                                handleDropInSlot(shape: shape, at: index)
+                            },
                             onTap: {
-                                if isSelectionMode, let selectedShape = selectedShape {
-                                    handleDropInSlot(shape: selectedShape, at: index)
+                                if isSelectionMode,
+                                    let selectedShape = selectedShape
+                                {
+                                    handleDropInSlot(
+                                        shape: selectedShape,
+                                        at: index
+                                    )
                                     self.selectedShape = nil
                                 }
                             }
@@ -102,27 +121,38 @@ struct SetupPatternView: View {
                 }
             }
             .padding(.horizontal, 40)
-            
+            .padding(.bottom, 20)
+
             Spacer()
-            
+
             // Available Shapes
             VStack(alignment: .leading, spacing: 15) {
                 Text("Available Shapes:")
                     .font(.headline)
                     .padding(.horizontal, 40)
-                
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4), spacing: 15) {
+
+                LazyVGrid(
+                    columns: Array(
+                        repeating: GridItem(.flexible(), spacing: 10),
+                        count: 4
+                    ),
+                    spacing: 15
+                ) {
                     ForEach(availableShapes, id: \.id) { shape in
                         DraggableShapeView(
                             shape: shape,
-                            isAlreadyInPattern: patternOrder.contains(where: { $0.id == shape.id }),
+                            isAlreadyInPattern: patternOrder.contains(where: {
+                                $0.id == shape.id
+                            }),
                             isSelected: selectedShape?.id == shape.id,
                             isSelectionMode: isSelectionMode,
                             onDragStart: { draggedShape = shape },
                             onDragEnd: { draggedShape = nil },
                             onTap: {
                                 if isSelectionMode {
-                                    selectedShape = selectedShape?.id == shape.id ? nil : shape
+                                    selectedShape =
+                                        selectedShape?.id == shape.id
+                                        ? nil : shape
                                 }
                             }
                         )
@@ -131,7 +161,7 @@ struct SetupPatternView: View {
                 .padding(.horizontal, 40)
             }
             .padding(.bottom, 20)
-            
+
             // Control Buttons
             HStack(spacing: 20) {
                 Button("Clear All") {
@@ -144,7 +174,7 @@ struct SetupPatternView: View {
                 .frame(height: 50)
                 .background(Color.red.opacity(0.7))
                 .cornerRadius(10)
-                
+
                 Button("Done") {
                     savePattern()
                     currentView = .home
@@ -166,9 +196,9 @@ struct SetupPatternView: View {
             loadCurrentPattern()
         }
     }
-    
+
     // MARK: - Helper Methods
-    
+
     private func setupShapes() {
         availableShapes = [
             ShapeItem(id: 1, sides: 3, color: .red, name: "Triangle"),
@@ -178,41 +208,43 @@ struct SetupPatternView: View {
             ShapeItem(id: 5, sides: 7, color: .purple, name: "Heptagon"),
             ShapeItem(id: 6, sides: 8, color: .pink, name: "Octagon"),
             ShapeItem(id: 7, sides: 9, color: .yellow, name: "Nonagon"),
-            ShapeItem(id: 8, sides: 10, color: .cyan, name: "Decagon")
+            ShapeItem(id: 8, sides: 10, color: .cyan, name: "Decagon"),
         ]
     }
-    
+
     private func loadCurrentPattern() {
         patternOrder = currentPattern.compactMap { id in
             availableShapes.first { $0.id == id }
         }
     }
-    
+
     private func savePattern() {
         currentPattern = patternOrder.map { $0.id }
     }
-    
+
     private func clearPattern() {
         patternOrder.removeAll()
     }
-    
+
     private func removeFromPattern(at index: Int) {
         if index < patternOrder.count {
             patternOrder.remove(at: index)
         }
     }
-    
+
     private func handleDropInSlot(shape: ShapeItem, at index: Int) {
         // Don't allow duplicate shapes in the pattern
         if patternOrder.contains(where: { $0.id == shape.id }) {
             return
         }
-        
+
         // Ensure the patternOrder array is large enough
         while patternOrder.count <= index {
-            patternOrder.append(ShapeItem(id: -1, sides: 0, color: .clear, name: "Empty"))
+            patternOrder.append(
+                ShapeItem(id: -1, sides: 0, color: .clear, name: "Empty")
+            )
         }
-        
+
         // If there's already a shape at this position and it's not empty, shift it
         if index < patternOrder.count && patternOrder[index].id != -1 {
             // Find the next empty slot or append at the end
@@ -223,18 +255,25 @@ struct SetupPatternView: View {
                     break
                 }
             }
-            
+
             if nextEmptyIndex != -1 && nextEmptyIndex < 5 {
                 while patternOrder.count <= nextEmptyIndex {
-                    patternOrder.append(ShapeItem(id: -1, sides: 0, color: .clear, name: "Empty"))
+                    patternOrder.append(
+                        ShapeItem(
+                            id: -1,
+                            sides: 0,
+                            color: .clear,
+                            name: "Empty"
+                        )
+                    )
                 }
                 patternOrder[nextEmptyIndex] = patternOrder[index]
             }
         }
-        
+
         // Place the new shape
         patternOrder[index] = shape
-        
+
         // Remove empty placeholders at the end
         while patternOrder.last?.id == -1 {
             patternOrder.removeLast()
@@ -252,10 +291,13 @@ struct PatternDropSlot: View {
     let onRemove: () -> Void
     let onDrop: (ShapeItem) -> Void
     let onTap: () -> Void
-    
+
     var body: some View {
         RoundedRectangle(cornerRadius: 8)
-            .stroke(isHovered ? Color.blue : Color.black, lineWidth: isHovered ? 3 : 2)
+            .stroke(
+                isHovered ? Color.blue : Color.black,
+                lineWidth: isHovered ? 3 : 2
+            )
             .frame(width: 80, height: 80)
             .background(
                 RoundedRectangle(cornerRadius: 8)
@@ -268,7 +310,7 @@ struct PatternDropSlot: View {
                             PolygonShape(sides: shape.sides)
                                 .fill(shape.color)
                                 .frame(width: 60, height: 60)
-                            
+
                             Text("\(shape.id)")
                                 .font(.title2)
                                 .fontWeight(.bold)
@@ -294,14 +336,15 @@ struct PatternDropSlot: View {
                 handleDrop(providers: providers)
             }
     }
-    
+
     private func handleDrop(providers: [NSItemProvider]) -> Bool {
         guard let provider = providers.first else { return false }
-        
+
         provider.loadObject(ofClass: NSString.self) { (object, error) in
             if let idString = object as? String,
-               let id = Int(idString),
-               let shape = getShapeById(id) {
+                let id = Int(idString),
+                let shape = getShapeById(id)
+            {
                 DispatchQueue.main.async {
                     onDrop(shape)
                 }
@@ -309,7 +352,7 @@ struct PatternDropSlot: View {
         }
         return true
     }
-    
+
     private func getShapeById(_ id: Int) -> ShapeItem? {
         let shapes = [
             ShapeItem(id: 1, sides: 3, color: .red, name: "Triangle"),
@@ -319,7 +362,7 @@ struct PatternDropSlot: View {
             ShapeItem(id: 5, sides: 7, color: .purple, name: "Heptagon"),
             ShapeItem(id: 6, sides: 8, color: .pink, name: "Octagon"),
             ShapeItem(id: 7, sides: 9, color: .yellow, name: "Nonagon"),
-            ShapeItem(id: 8, sides: 10, color: .cyan, name: "Decagon")
+            ShapeItem(id: 8, sides: 10, color: .cyan, name: "Decagon"),
         ]
         return shapes.first { $0.id == id }
     }
@@ -333,39 +376,27 @@ struct DraggableShapeView: View {
     let onDragStart: () -> Void
     let onDragEnd: () -> Void
     let onTap: () -> Void
-    
+
     var body: some View {
         VStack(spacing: 5) {
-            ZStack {
-                PolygonShape(sides: shape.sides)
-                    .fill(shape.color)
-                    .frame(width: 60, height: 60)
-                
-                Text("\(shape.id)")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
-            }
-            
-            Text(shape.name)
-                .font(.caption)
-                .foregroundColor(.primary)
+            PolygonShape(sides: shape.sides)
+                .fill(shape.color)
+                .frame(width: 60, height: 60)
         }
         .scaleEffect(0.9)
         .opacity(isAlreadyInPattern ? 0.5 : 1.0)
         .overlay(
             // Selection indicator
-            isSelected ?
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.blue, lineWidth: 3)
-                .background(Color.blue.opacity(0.2))
-            :
-            // Visual indicator if already used
-            isAlreadyInPattern ?
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.gray, lineWidth: 2)
-                .background(Color.gray.opacity(0.3))
-            : nil
+            isSelected
+                ? RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.blue, lineWidth: 3)
+                    .background(Color.blue.opacity(0.2))
+                : // Visual indicator if already used
+                isAlreadyInPattern
+                    ? RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.gray, lineWidth: 2)
+                        .background(Color.gray.opacity(0.3))
+                    : nil
         )
         .onTapGesture {
             onTap()
@@ -382,13 +413,13 @@ struct DraggableShapeView: View {
 
 struct DraggableShape: View {
     let shape: ShapeItem
-    
+
     var body: some View {
         VStack(spacing: 5) {
             PolygonShape(sides: shape.sides)
                 .fill(shape.color)
                 .frame(width: 60, height: 60)
-        
+
             Text(shape.name)
                 .font(.caption)
                 .foregroundColor(.primary)
@@ -411,27 +442,27 @@ struct ShapeItem: Identifiable, Equatable {
 
 struct PolygonShape: Shape {
     let sides: Int
-    
+
     func path(in rect: CGRect) -> Path {
         let center = CGPoint(x: rect.width / 2, y: rect.height / 2)
         let radius = min(rect.width, rect.height) / 2
-        
+
         var path = Path()
-        
+
         for i in 0..<sides {
             let angle = (Double(i) * 2 * .pi / Double(sides)) - .pi / 2
             let point = CGPoint(
                 x: center.x + radius * Darwin.cos(angle),
                 y: center.y + radius * Darwin.sin(angle)
             )
-            
+
             if i == 0 {
                 path.move(to: point)
             } else {
                 path.addLine(to: point)
             }
         }
-        
+
         path.closeSubpath()
         return path
     }
@@ -443,7 +474,7 @@ extension View {
     func onDragEnd(_ action: @escaping () -> Void) -> some View {
         self.onEnded(action)
     }
-    
+
     private func onEnded(_ action: @escaping () -> Void) -> some View {
         self.background(
             DragEndDetector(onDragEnd: action)
@@ -453,12 +484,16 @@ extension View {
 
 struct DragEndDetector: View {
     let onDragEnd: () -> Void
-    
+
     var body: some View {
         Rectangle()
             .fill(Color.clear)
             .frame(width: 0, height: 0)
-            .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextObjectsDidChange)) { _ in
+            .onReceive(
+                NotificationCenter.default.publisher(
+                    for: .NSManagedObjectContextObjectsDidChange
+                )
+            ) { _ in
                 // This is a workaround - in a real app you'd want a better drag end detection
                 onDragEnd()
             }

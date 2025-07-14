@@ -12,6 +12,7 @@ struct CogniPlayApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .statusBar(hidden: true)
         }
     }
 }

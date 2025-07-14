@@ -89,12 +89,13 @@ struct PersistentNavBar: View {
         }
         .frame(height: 44) // Consistent height
         .padding(.horizontal, 20)
-        .padding(.top, 50) // Add top padding to account for status bar and notch
+        .padding(.top, 15) // Add top padding to account for status bar and notch
         .padding(.bottom, 15)
         .background(Color.gray.opacity(0.15))
         .ignoresSafeArea(.container, edges: .top) // Extend beyond safe area at top
     }
 }
+
 // MARK: - Terms of Service View
 struct TermsOfServiceView: View {
     @Binding var showingTerms: Bool
