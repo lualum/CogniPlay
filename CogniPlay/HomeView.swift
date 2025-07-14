@@ -7,11 +7,11 @@
 
 import SwiftUI
 
-// MARK: - Home View
-struct HomeView: View {
+struct UpdatedHomeView: View {
     @Binding var showingTerms: Bool
     @Binding var termsAccepted: Bool
     @Binding var currentView: ContentView.AppView
+    @ObservedObject var sessionManager: SessionManager
     
     var body: some View {
         VStack(spacing: 0) {
@@ -24,121 +24,87 @@ struct HomeView: View {
                 .padding(.bottom, 40)
             
             VStack(spacing: 20) {
-                // Setup Pattern Button
+                // New Session Button
                 Button(action: {
                     if termsAccepted {
-                        currentView = .setupPattern
+                        sessionManager.createNewSession()
+                        currentView = .sessionChecklist
                     } else {
                         showingTerms = true
                     }
                 }) {
-                    Text("Setup Pattern")
-                        .font(.title2)
-                        .fontWeight(.medium)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(Color.green.opacity(0.7))
-                        .cornerRadius(10)
-                }
-                
-                // Speech Button
-                Button(action: {
-                    if termsAccepted {
-                        currentView = .speech
-                    } else {
-                        showingTerms = true
+                    VStack(spacing: 5) {
+                        Text("New Session")
+                            .font(.title2)
+                            .fontWeight(.medium)
+                        Text("Start cognitive assessment")
+                            .font(.caption)
+                            .opacity(0.8)
                     }
-                }) {
-                    Text("Speech")
-                        .font(.title2)
-                        .fontWeight(.medium)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(Color.blue.opacity(0.7))
-                        .cornerRadius(10)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 70)
+                    .background(Color.blue.opacity(0.8))
+                    .cornerRadius(12)
                 }
                 
-                // Simon Button
-                Button(action: {
-                    if termsAccepted {
-                        currentView = .simon
-                    } else {
-                        showingTerms = true
+                // Continue Session Button (if session exists)
+                if sessionManager.currentSession != nil {
+                    Button(action: {
+                        currentView = .sessionChecklist
+                    }) {
+                        VStack(spacing: 5) {
+                            Text("Continue Session")
+                                .font(.title2)
+                                .fontWeight(.medium)
+                            Text("Resume in progress")
+                                .font(.caption)
+                                .opacity(0.8)
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 70)
+                        .background(Color.green.opacity(0.8))
+                        .cornerRadius(12)
                     }
-                }) {
-                    Text("Simon")
-                        .font(.title2)
-                        .fontWeight(.medium)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(Color.purple.opacity(0.7))
-                        .cornerRadius(10)
                 }
                 
-                // Whack-a-Mole Button
+                // Results History Button
                 Button(action: {
-                    if termsAccepted {
-                        currentView = .whackAMole
-                    } else {
-                        showingTerms = true
+                    // Navigate to results history (implement later)
+                    //currentView = .results
+                }) {
+                    VStack(spacing: 5) {
+                        Text("Results History")
+                            .font(.title2)
+                            .fontWeight(.medium)
+                        Text("View past sessions")
+                            .font(.caption)
+                            .opacity(0.8)
                     }
-                }) {
-                    Text("Whack-a-Mole")
-                        .font(.title2)
-                        .fontWeight(.medium)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(Color.orange.opacity(0.7))
-                        .cornerRadius(10)
-                }
-                
-                // Test Pattern Button
-                Button(action: {
-                    if termsAccepted {
-                        currentView = .testPattern
-                    } else {
-                        showingTerms = true
-                    }
-                }) {
-                    Text("Test Pattern")
-                        .font(.title2)
-                        .fontWeight(.medium)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(Color.green.opacity(0.7))
-                        .cornerRadius(10)
-                }
-                
-                // Results Button
-                Button(action: {
-                    // Results action
-                }) {
-                    Text("Results")
-                        .font(.title2)
-                        .fontWeight(.medium)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(Color.red.opacity(0.6))
-                        .cornerRadius(10)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 70)
+                    .background(Color.purple.opacity(0.8))
+                    .cornerRadius(12)
                 }
                 
                 // Info Button
                 Button(action: {
                     // Info action
                 }) {
-                    Image(systemName: "info.circle.fill")
-                        .font(.title)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(Color.green.opacity(0.7))
-                        .cornerRadius(10)
+                    HStack {
+                        Image(systemName: "info.circle.fill")
+                            .font(.title2)
+                        Text("About CogniPlay")
+                            .font(.title3)
+                            .fontWeight(.medium)
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(Color.gray.opacity(0.6))
+                    .cornerRadius(10)
                 }
             }
             .padding(.horizontal, 30)
@@ -146,5 +112,9 @@ struct HomeView: View {
             Spacer()
         }
         .background(Color.white)
+        .onAppear {
+            sessionManager.loadSession()
+        }
+        .environmentObject(sessionManager)
     }
 }

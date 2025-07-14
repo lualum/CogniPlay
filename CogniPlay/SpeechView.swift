@@ -101,7 +101,7 @@ class AudioRecorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
 
 // MARK: - Enhanced Hugging Face Service Class
 class HuggingFaceService: ObservableObject {
-    private let apiKey = "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"
+    private let apiKey = "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"
     private let apiURL = "https://wpa4x28892l5a6i5.us-east-1.aws.endpoints.huggingface.cloud"
     
     func validateAPIKey() async throws -> Bool {

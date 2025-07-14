@@ -15,7 +15,7 @@ struct WhackAMoleView: View {
     @State private var timeRemaining = 30
     @State private var gameActive = false
     @State private var gameTimer: Timer?
-    @State private var spawnWorkItem: DispatchWorkItem?
+    @State private var moleTimer: Timer?
     
     let columns = Array(repeating: GridItem(.flexible()), count: 3)
     
@@ -156,14 +156,16 @@ struct WhackAMoleView: View {
             }
         }
         
-        // Start the game with initial moles
-        scheduleNextMoleSpawn()
+        // Start mole timer
+        moleTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            showRandomMole()
+        }
     }
     
     func stopGame() {
         gameActive = false
         gameTimer?.invalidate()
-        spawnWorkItem?.cancel()
+        moleTimer?.invalidate()
         moles = Array(repeating: false, count: 12)
     }
     
@@ -173,68 +175,25 @@ struct WhackAMoleView: View {
         moles = Array(repeating: false, count: 12)
     }
     
-    func checkAndSpawnMoles() {
-        guard gameActive else { return }
-        
-        // Check if there are any moles currently visible
-        let activeMoles = moles.filter { $0 }.count
-        
-        if activeMoles == 0 {
-            scheduleNextMoleSpawn()
-        }
-    }
-    
-    func scheduleNextMoleSpawn() {
-        guard gameActive else { return }
-        
-        // Cancel any existing spawn work
-        spawnWorkItem?.cancel()
-        
-        // Random delay between 0.2 and 1.0 seconds
-        let delay = Double.random(in: 0.2...1.0)
-        
-        spawnWorkItem = DispatchWorkItem { [weak self] in
-            self?.spawnMoles()
+    func showRandomMole() {
+        // Hide all moles first
+        for i in 0..<moles.count {
+            moles[i] = false
         }
         
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: spawnWorkItem!)
-    }
-    
-    func spawnMoles() {
-        guard gameActive else { return }
-        
-        // Weighted random selection: 25% for 1, 50% for 2, 25% for 3
-        let randomValue = Int.random(in: 1...100)
-        let numberOfMoles: Int
-        
-        switch randomValue {
-        case 1...25:
-            numberOfMoles = 1
-        case 26...75:
-            numberOfMoles = 2
-        case 76...100:
-            numberOfMoles = 3
-        default:
-            numberOfMoles = 2
-        }
-        
-        // Get available positions
+        // Show 1-3 random moles
+        let numberOfMoles = Int.random(in: 1...3)
         var availablePositions = Array(0..<12)
         
-        // Spawn the moles
         for _ in 0..<numberOfMoles {
             if !availablePositions.isEmpty {
                 let randomIndex = availablePositions.randomElement()!
                 moles[randomIndex] = true
                 availablePositions.removeAll { $0 == randomIndex }
                 
-                // Hide mole after 1.5 seconds and check for respawn
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-                    self?.moles[randomIndex] = false
-                    // Check if we need to spawn new moles after this one disappears
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        self?.checkAndSpawnMoles()
-                    }
+                // Hide mole after 1.5 seconds
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    moles[randomIndex] = false
                 }
             }
         }
@@ -244,11 +203,6 @@ struct WhackAMoleView: View {
         if moles[index] {
             moles[index] = false
             score += 1
-            
-            // Check if we need to spawn new moles after a short delay
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                checkAndSpawnMoles()
-            }
         }
     }
 }

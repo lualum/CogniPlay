@@ -13,9 +13,10 @@ struct ContentView: View {
     @State private var termsAccepted = false
     @State private var currentView: AppView = .home
     @State private var currentPattern: [Int] = []
+    @StateObject private var sessionManager = SessionManager()
     
     enum AppView {
-        case home, setupPattern, speech, simon, whackAMole, testPattern
+        case home, sessionChecklist, setupPattern, speech, simon, whackAMole, testPattern
     }
     
     var body: some View {
@@ -32,11 +33,14 @@ struct ContentView: View {
                 Group {
                     switch currentView {
                     case .home:
-                        HomeView(
+                        UpdatedHomeView(
                             showingTerms: $showingTerms,
                             termsAccepted: $termsAccepted,
-                            currentView: $currentView
+                            currentView: $currentView,
+                            sessionManager: sessionManager
                         )
+                    case .sessionChecklist:
+                        SessionChecklistView(sessionManager: sessionManager, currentView: $currentView)
                     case .setupPattern:
                         SetupPatternView(currentView: $currentView, currentPattern: $currentPattern)
                     case .speech:
