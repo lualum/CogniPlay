@@ -1,10 +1,12 @@
 import SwiftUI
 
-struct UpdatedHomeView: View {
+struct HomeView: View {
   @Binding var showingTerms: Bool
   @Binding var termsAccepted: Bool
   @Binding var currentView: ContentView.AppView
+
   @ObservedObject private var sessionManager = SessionManager.shared
+  @State private var hasExistingSession = false
 
   var body: some View {
     VStack(spacing: 0) {
@@ -14,35 +16,13 @@ struct UpdatedHomeView: View {
       Text("CogniPlay")
         .font(.largeTitle)
         .fontWeight(.bold)
+        .foregroundColor(.black)  // Ensure text is visible
         .padding(.bottom, 40)
 
       VStack(spacing: 20) {
-        // New Session Button
-        Button(action: {
-          if termsAccepted {
-            sessionManager.createNewSession()
-            currentView = .sessionChecklist
-          } else {
-            showingTerms = true
-          }
-        }) {
-          VStack(spacing: 5) {
-            Text("New Session")
-              .font(.title2)
-              .fontWeight(.medium)
-            Text("Start cognitive assessment")
-              .font(.caption)
-              .opacity(0.8)
-          }
-          .foregroundColor(.white)
-          .frame(maxWidth: .infinity)
-          .frame(height: 70)
-          .background(Color.blue.opacity(0.8))
-          .cornerRadius(12)
-        }
-
-        // Continue Session Button (if session exists)
-        if sessionManager.currentSession != nil {
+        // Check if a session exists
+        if hasExistingSession {
+          // Continue Session Button
           Button(action: {
             currentView = .sessionChecklist
           }) {
@@ -60,11 +40,59 @@ struct UpdatedHomeView: View {
             .background(Color.green.opacity(0.8))
             .cornerRadius(12)
           }
+
+          // Reset Session Button
+          Button(action: {
+            sessionManager.createNewSession()
+            hasExistingSession = true  // Update state
+            currentView = .sessionChecklist
+          }) {
+            VStack(spacing: 5) {
+              Text("Reset Session")
+                .font(.title2)
+                .fontWeight(.medium)
+              Text("Start a new assessment")
+                .font(.caption)
+                .opacity(0.8)
+            }
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .frame(height: 70)
+            .background(Color.red.opacity(0.8))
+            .cornerRadius(12)
+          }
+
+        } else {
+          // New Session Button
+          Button(action: {
+            if termsAccepted {
+              sessionManager.createNewSession()
+              hasExistingSession = true  // Update state
+              currentView = .sessionChecklist
+            } else {
+              showingTerms = true
+            }
+          }) {
+            VStack(spacing: 5) {
+              Text("New Session")
+                .font(.title2)
+                .fontWeight(.medium)
+              Text("Start cognitive assessment")
+                .font(.caption)
+                .opacity(0.8)
+            }
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .frame(height: 70)
+            .background(Color.blue.opacity(0.8))
+            .cornerRadius(12)
+          }
         }
 
         // Results History Button
         Button(action: {
           // Navigate to results history (implement later)
+          print("Results History tapped")  // Debug action
           //currentView = .results
         }) {
           VStack(spacing: 5) {
@@ -84,7 +112,7 @@ struct UpdatedHomeView: View {
 
         // Info Button
         Button(action: {
-          // Info action
+          print("Info tapped")  // Debug action
         }) {
           HStack {
             Image(systemName: "info.circle.fill")
@@ -105,6 +133,10 @@ struct UpdatedHomeView: View {
       Spacer()
     }
     .background(Color.white)
+    .onAppear {
+      // Load sessions when view appears, not in body
+      hasExistingSession = sessionManager.loadSessions()
+    }
     .environmentObject(sessionManager)
   }
 }

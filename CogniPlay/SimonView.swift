@@ -10,6 +10,9 @@ import SwiftUI
 // MARK: - Simon Game View
 struct SimonView: View {
   @Binding var currentView: ContentView.AppView
+  @Binding var simonScore: Int
+  @ObservedObject private var sessionManager = SessionManager.shared
+
   @State private var gameState: SimonGameState = .waiting
   @State private var sequence: [Int] = []
   @State private var playerInput: [Int] = []
@@ -18,6 +21,7 @@ struct SimonView: View {
   @State private var activeButton: Int? = nil
   @State private var showingSequence = false
   @State private var isProcessingInput = false
+  @State private var showingEndConfirmation = false
 
   enum SimonGameState {
     case waiting, showingSequence, playerTurn, gameOver
@@ -72,73 +76,91 @@ struct SimonView: View {
       }
       .padding(.bottom, 40)
 
-      // Status text
-      HStack {
-        switch gameState {
-        case .waiting:
-          Text("Press Start to begin!")
-            .font(.headline)
-            .foregroundColor(.gray)
-        case .showingSequence:
-          Text("Watch the sequence...")
-            .font(.headline)
-            .foregroundColor(.blue)
-        case .playerTurn:
-          Text("Your turn! Repeat the sequence")
-            .font(.headline)
-            .foregroundColor(.green)
-        case .gameOver:
-          Text("Game Over! Final Score: \(score)")
-            .font(.headline)
-            .foregroundColor(.red)
-        }
-      }
-      .padding(.bottom, 20)
+      .padding(.bottom, 60)
 
-      // Control buttons
+      // Single toggle button
       VStack(spacing: 15) {
-        if gameState == .waiting {
-          Button(action: startGame) {
-            Text("Start Game")
-              .font(.title2)
-              .fontWeight(.medium)
-              .foregroundColor(.white)
-              .frame(maxWidth: .infinity)
-              .frame(height: 50)
-              .background(Color.green.opacity(0.7))
-              .cornerRadius(10)
-          }
-        } else if gameState == .gameOver {
-          Button(action: startGame) {
-            Text("Play Again")
-              .font(.title2)
-              .fontWeight(.medium)
-              .foregroundColor(.white)
-              .frame(maxWidth: .infinity)
-              .frame(height: 50)
-              .background(Color.green.opacity(0.7))
-              .cornerRadius(10)
-          }
-        }
-
-        Button(action: {
-          currentView = .home
-        }) {
-          Text("End Game")
+        Button(action: handleButtonTap) {
+          Text(getButtonText())
             .font(.title2)
             .fontWeight(.medium)
             .foregroundColor(.white)
             .frame(maxWidth: .infinity)
             .frame(height: 50)
-            .background(Color.blue.opacity(0.7))
+            .background(getButtonColor())
             .cornerRadius(10)
+            .animation(.easeInOut(duration: 0.3), value: getButtonText())
+            .animation(.easeInOut(duration: 0.3), value: getButtonColor())
         }
+        .disabled(
+          gameState == .showingSequence || gameState == .playerTurn || showingEndConfirmation
+        )
+        .animation(
+          .easeInOut(duration: 0.3),
+          value: gameState == .showingSequence || gameState == .playerTurn || showingEndConfirmation
+        )
       }
       .padding(.horizontal, 30)
 
       Spacer()
     }
     .background(Color.white)
+  }
+
+  func getButtonText() -> String {
+    if showingEndConfirmation {
+      return "Game Over"
+    }
+
+    switch gameState {
+    case .waiting:
+      return "Start Game"
+    case .showingSequence:
+      return "Watch the sequence..."
+    case .playerTurn:
+      return "Your turn! Repeat the sequence"
+    case .gameOver:
+      return "Done"
+    }
+  }
+
+  func getButtonColor() -> Color {
+    if showingEndConfirmation {
+      return Color.gray.opacity(0.7)
+    }
+
+    switch gameState {
+    case .waiting:
+      return Color.green.opacity(0.7)
+    case .showingSequence:
+      return Color.blue.opacity(0.7)
+    case .playerTurn:
+      return Color.green.opacity(0.7)
+    case .gameOver:
+      return Color.blue.opacity(0.7)
+    }
+  }
+
+  func handleButtonTap() {
+    switch gameState {
+    case .waiting:
+      startGame()
+    case .showingSequence, .playerTurn:
+      // No action during active gameplay
+      break
+    case .gameOver:
+      simonScore = score
+      sessionManager.completeTask("simon")
+      currentView = .sessionChecklist
+    }
+  }
+
+  func endGame() {
+    showingEndConfirmation = true
+
+    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+      showingEndConfirmation = false
+    }
   }
 
   func startGame() {
@@ -161,18 +183,30 @@ struct SimonView: View {
     gameState = .showingSequence
     showingSequence = true
     isProcessingInput = true
+    activeButton = nil  // Ensure we start with no active button
 
     for (index, colorIndex) in sequence.enumerated() {
-      DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.8 + 0.5) {
-        activeButton = colorIndex
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-          activeButton = nil
-          if index == sequence.count - 1 {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-              gameState = .playerTurn
-              playerInput = []
-              currentStep = 0
-              isProcessingInput = false
+      let delay = Double(index) * 0.8 + 0.5
+
+      // First ensure button is deactivated
+      DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+        activeButton = nil
+
+        // Then activate the button after a brief pause
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+          activeButton = colorIndex
+
+          // Then deactivate after showing
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            activeButton = nil
+
+            if index == sequence.count - 1 {
+              DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                gameState = .playerTurn
+                playerInput = []
+                currentStep = 0
+                isProcessingInput = false
+              }
             }
           }
         }
@@ -196,6 +230,12 @@ struct SimonView: View {
         print("Game over! Tapped \(index), expected \(sequence[currentStep])")
         gameState = .gameOver
         isProcessingInput = false
+
+        // Show "Game Ended" confirmation for 2 seconds
+        showingEndConfirmation = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+          showingEndConfirmation = false
+        }
         return
       }
 

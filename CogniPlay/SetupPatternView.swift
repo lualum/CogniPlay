@@ -26,8 +26,8 @@ struct SetupPatternView: View {
           .fontWeight(.bold)
           .foregroundColor(.black)
 
-        Text("Drag & Drop or Tap Object then Tap Slot")
-          .font(.title2)
+        Text("Drag & Drop")
+          .font(.title3)
           .fontWeight(.medium)
           .foregroundColor(.black)
       }
@@ -97,7 +97,7 @@ struct SetupPatternView: View {
 
       // Available Shapes
       VStack(alignment: .leading, spacing: 15) {
-        Text("Available Shapes:")
+        Text("Available Objects:")
           .font(.headline)
           .padding(.horizontal, 40)
 
@@ -133,6 +133,7 @@ struct SetupPatternView: View {
           }
         }
         .padding(.horizontal, 40)
+
       }
       .padding(.bottom, 20)
 
@@ -182,7 +183,6 @@ struct SetupPatternView: View {
   // MARK: - Helper Methods
 
   private func setupShapes() {
-    // Generate random images from PatternSets
     availableShapes = generateRandomShapes()
   }
 

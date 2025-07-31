@@ -15,10 +15,6 @@ class SessionManager: ObservableObject {
   @Published var currentSession: Session?
   @Published var sessions: [Session] = []
 
-  private init() {
-    loadSessions()
-  }
-
   func createNewSession() {
     let newSession = Session(
       id: UUID().uuidString,
@@ -67,7 +63,7 @@ class SessionManager: ObservableObject {
     return [
       SessionTask(
         id: "setup", name: "Setup Pattern", duration: "(0:30)", isLocked: false),
-      SessionTask(id: "whack", name: "Whack-a-Mole", duration: "(1:00)"),
+      SessionTask(id: "whack", name: "Whack-a-Mole", duration: "(0:30)"),
       SessionTask(id: "simon", name: "Simon Memory", duration: "(1:30)"),
       SessionTask(id: "speechSpeed", name: "Speech (Speed)", duration: "(1:00)"),
       SessionTask(id: "speechImage", name: "Speech (Image)", duration: "(1:00)"),
@@ -95,12 +91,18 @@ class SessionManager: ObservableObject {
     }
   }
 
-  private func loadSessions() {
+  @discardableResult
+  func loadSessions() -> Bool {
+    var didLoadData = false
+    var isDifferentFromDefault = false
+
     // Load all sessions
     if let data = UserDefaults.standard.data(forKey: "sessions"),
-      let loadedSessions = try? JSONDecoder().decode([Session].self, from: data)
+      let loadedSessions = try? JSONDecoder().decode([Session].self, from: data),
+      !loadedSessions.isEmpty
     {
       sessions = loadedSessions
+      didLoadData = true
     }
 
     // Load current session
@@ -108,12 +110,21 @@ class SessionManager: ObservableObject {
       let session = try? JSONDecoder().decode(Session.self, from: data)
     {
       currentSession = session
+      didLoadData = true
 
       // Ensure current session is in sessions array
       if !sessions.contains(where: { $0.id == session.id }) {
         sessions.append(session)
       }
+
+      // Check if current session differs from default session
+      let defaultTasks = createDefaultTasks()
+      if session.tasks != defaultTasks {
+        isDifferentFromDefault = true
+      }
     }
+
+    return didLoadData && isDifferentFromDefault
   }
 
   // Helper method to reset/clear all data (useful for testing)
@@ -142,3 +153,11 @@ struct Session: Codable, Identifiable {
 }
 
 extension SessionTask: Codable {}
+
+extension SessionTask: Equatable {
+  static func == (lhs: SessionTask, rhs: SessionTask) -> Bool {
+    return lhs.id == rhs.id && lhs.name == rhs.name && lhs.duration == rhs.duration
+      && lhs.isCompleted == rhs.isCompleted && lhs.isLocked == rhs.isLocked
+      && lhs.isOptional == rhs.isOptional
+  }
+}

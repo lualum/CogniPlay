@@ -5,7 +5,10 @@ struct ContentView: View {
   @State private var showingTerms = false
   @State private var termsAccepted = false
   @State private var currentView: AppView = .home
+
   @State private var currentPattern: [Int] = []
+  @State private var whackAMoleScore: Double = 0
+  @State private var simonScore: Int = 0
 
   @StateObject private var sessionManager = SessionManager.shared
 
@@ -26,7 +29,7 @@ struct ContentView: View {
           Group {
             switch currentView {
             case .home:
-              UpdatedHomeView(
+              HomeView(
                 showingTerms: $showingTerms,
                 termsAccepted: $termsAccepted,
                 currentView: $currentView
@@ -43,23 +46,29 @@ struct ContentView: View {
             case .speech:
               SpeechView(currentView: $currentView)
             case .simon:
-              SimonView(currentView: $currentView)
+              SimonView(currentView: $currentView, simonScore: $simonScore)
             case .whackAMole:
-              WhackAMoleView(currentView: $currentView)
+              WhackAMoleView(
+                currentView: $currentView,
+                whackAMoleScore: $whackAMoleScore)
             /*case .testPattern:
              TestPatternView(currentView: $currentView, currentPattern: $currentPattern)*/
             }
           }
           .frame(maxWidth: .infinity, maxHeight: .infinity)
+          // 1. Add a transition to specify the animation effect (fade)
+          .transition(.opacity)
         }
       }
+      // 2. Add an animation modifier that listens for changes to a specific value
+      .animation(.easeInOut(duration: 0.2), value: currentView)
       .sheet(isPresented: $showingTerms) {
         TermsOfServiceView(
           showingTerms: $showingTerms,
           termsAccepted: $termsAccepted,
           currentView: $currentView
         )
-
+        .buttonStyle(DefaultButtonStyle())
       }
     }
   }
