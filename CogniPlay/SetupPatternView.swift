@@ -4,7 +4,7 @@ import SwiftUI
 // MARK: - Setup Pattern Game View
 struct SetupPatternView: View {
   @Binding var currentView: ContentView.AppView
-  @Binding var currentPattern: [Int]
+  @Binding var currentPattern: [ShapeItem]
   @ObservedObject private var sessionManager = SessionManager.shared
 
   @State private var availableShapes: [ShapeItem] = []
@@ -42,23 +42,23 @@ struct SetupPatternView: View {
         HStack(spacing: 20) {
           ForEach(0..<3) { index in
             PatternDropSlot(
-              shape: index < patternOrder.count
-                ? patternOrder[index] : nil,
+              shape: index < patternOrder.count ? patternOrder[index] : nil,
               index: index,
               isHovered: hoveredSlot == index,
               selectedShape: selectedShape,
+              availableShapes: availableShapes,
               onRemove: { removeFromPattern(at: index) },
               onDrop: { shape in
                 handleDropInSlot(shape: shape, at: index)
               },
               onTap: {
                 if let selectedShape = selectedShape {
-                  handleDropInSlot(
-                    shape: selectedShape,
-                    at: index
-                  )
+                  handleDropInSlot(shape: selectedShape, at: index)
                   self.selectedShape = nil
                 }
+              },
+              onHoverChange: { isHovered in
+                hoveredSlot = isHovered ? index : nil
               }
             )
           }
@@ -68,23 +68,23 @@ struct SetupPatternView: View {
         HStack(spacing: 20) {
           ForEach(3..<5) { index in
             PatternDropSlot(
-              shape: index < patternOrder.count
-                ? patternOrder[index] : nil,
+              shape: index < patternOrder.count ? patternOrder[index] : nil,
               index: index,
               isHovered: hoveredSlot == index,
               selectedShape: selectedShape,
+              availableShapes: availableShapes,
               onRemove: { removeFromPattern(at: index) },
               onDrop: { shape in
                 handleDropInSlot(shape: shape, at: index)
               },
               onTap: {
                 if let selectedShape = selectedShape {
-                  handleDropInSlot(
-                    shape: selectedShape,
-                    at: index
-                  )
+                  handleDropInSlot(shape: selectedShape, at: index)
                   self.selectedShape = nil
                 }
+              },
+              onHoverChange: { isHovered in
+                hoveredSlot = isHovered ? index : nil
               }
             )
           }
@@ -112,28 +112,30 @@ struct SetupPatternView: View {
             DraggableShapeView(
               shape: shape,
               isAlreadyInPattern: patternOrder.contains(where: {
-                $0.id == shape.id
+                $0.id == shape.id && $0.type == shape.type
               }),
-              isSelected: selectedShape?.id == shape.id,
+              isSelected: selectedShape?.id == shape.id && selectedShape?.type == shape.type,
+              isDragging: draggedShape?.id == shape.id && draggedShape?.type == shape.type,
               onDragStart: {
-                // Only allow drag if not already in pattern
-                if !patternOrder.contains(where: { $0.id == shape.id }) {
+                if !patternOrder.contains(where: { $0.id == shape.id && $0.type == shape.type }) {
                   draggedShape = shape
-                  selectedShape = nil  // Clear selection when dragging
+                  selectedShape = nil
                 }
               },
-              onDragEnd: { draggedShape = nil },
+              onDragEnd: {
+                draggedShape = nil
+              },
               onTap: {
-                // Only allow selection if not already in pattern
-                if !patternOrder.contains(where: { $0.id == shape.id }) {
-                  selectedShape = selectedShape?.id == shape.id ? nil : shape
+                if !patternOrder.contains(where: { $0.id == shape.id && $0.type == shape.type }) {
+                  let isSameShape =
+                    selectedShape?.id == shape.id && selectedShape?.type == shape.type
+                  selectedShape = isSameShape ? nil : shape
                 }
               }
             )
           }
         }
         .padding(.horizontal, 40)
-
       }
       .padding(.bottom, 20)
 
@@ -175,7 +177,6 @@ struct SetupPatternView: View {
       loadCurrentPattern()
     }
     .onTapGesture {
-      // Clear selection when tapping outside
       selectedShape = nil
     }
   }
@@ -192,19 +193,37 @@ struct SetupPatternView: View {
     ]
 
     var shapes: [ShapeItem] = []
+    var usedImageIDs: Set<String> = []  // Changed to String to store "type:id" combinations
 
     for i in 1...8 {
       let randomSetName = patternSets.keys.randomElement() ?? "Animals"
       let maxImages = patternSets[randomSetName] ?? 1
-      let randomImageNumber = Int.random(in: 1...maxImages)
-      let imageName = "\(randomSetName)/\(randomImageNumber)"
+
+      // Keep trying until we find an unused image ID
+      var randomImageID: Int
+      var attempts = 0
+      var uniqueKey: String
+
+      repeat {
+        randomImageID = Int.random(in: 1...maxImages)
+        uniqueKey = "\(randomSetName):\(randomImageID)"
+        attempts += 1
+
+        // Safety check to prevent infinite loop if we run out of unique images
+        if attempts > maxImages * 2 {
+          // If we can't find a unique image, use a fallback
+          randomImageID = Int.random(in: 1...maxImages)
+          uniqueKey = "\(randomSetName):\(randomImageID)"
+          break
+        }
+      } while usedImageIDs.contains(uniqueKey)
+
+      usedImageIDs.insert(uniqueKey)
 
       shapes.append(
         ShapeItem(
-          id: i,
-          imageName: imageName,
-          color: Color.clear,
-          name: "\(randomSetName) \(randomImageNumber)"
+          type: randomSetName,
+          id: randomImageID
         ))
     }
 
@@ -212,13 +231,11 @@ struct SetupPatternView: View {
   }
 
   private func loadCurrentPattern() {
-    patternOrder = currentPattern.compactMap { id in
-      availableShapes.first { $0.id == id }
-    }
+    patternOrder = currentPattern
   }
 
   private func savePattern() {
-    currentPattern = patternOrder.map { $0.id }
+    currentPattern = patternOrder
   }
 
   private func clearPattern() {
@@ -234,14 +251,14 @@ struct SetupPatternView: View {
 
   private func handleDropInSlot(shape: ShapeItem, at index: Int) {
     // Don't allow duplicate shapes in the pattern
-    if patternOrder.contains(where: { $0.id == shape.id }) {
+    if patternOrder.contains(where: { $0.id == shape.id && $0.type == shape.type }) {
       return
     }
 
     // Ensure the patternOrder array is large enough
     while patternOrder.count <= index {
       patternOrder.append(
-        ShapeItem(id: -1, imageName: "", color: .clear, name: "Empty")
+        ShapeItem(type: "", id: -1)
       )
     }
 
@@ -259,12 +276,7 @@ struct SetupPatternView: View {
       if nextEmptyIndex != -1 && nextEmptyIndex < 5 {
         while patternOrder.count <= nextEmptyIndex {
           patternOrder.append(
-            ShapeItem(
-              id: -1,
-              imageName: "",
-              color: .clear,
-              name: "Empty"
-            )
+            ShapeItem(type: "", id: -1)
           )
         }
         patternOrder[nextEmptyIndex] = patternOrder[index]
@@ -288,9 +300,13 @@ struct PatternDropSlot: View {
   let index: Int
   let isHovered: Bool
   let selectedShape: ShapeItem?
+  let availableShapes: [ShapeItem]
   let onRemove: () -> Void
   let onDrop: (ShapeItem) -> Void
   let onTap: () -> Void
+  let onHoverChange: (Bool) -> Void
+
+  @State private var isTargeted = false
 
   private var isTargetForSelection: Bool {
     selectedShape != nil && (shape == nil || shape?.id == -1)
@@ -299,30 +315,29 @@ struct PatternDropSlot: View {
   var body: some View {
     RoundedRectangle(cornerRadius: 8)
       .stroke(
-        isTargetForSelection ? Color.blue : isHovered ? Color.blue : Color.black,
-        lineWidth: isTargetForSelection ? 3 : isHovered ? 3 : 2
+        isTargetForSelection ? Color.blue : (isHovered || isTargeted) ? Color.blue : Color.black,
+        lineWidth: isTargetForSelection ? 3 : (isHovered || isTargeted) ? 3 : 2
       )
       .frame(width: 80, height: 80)
       .background(
         RoundedRectangle(cornerRadius: 8)
           .fill(
             isTargetForSelection
-              ? Color.blue.opacity(0.1) : isHovered ? Color.blue.opacity(0.1) : Color.white)
+              ? Color.blue.opacity(0.1)
+              : (isHovered || isTargeted) ? Color.blue.opacity(0.1) : Color.white
+          )
       )
       .overlay(
         Group {
           if let shape = shape, shape.id != -1 {
             ZStack {
-              if !shape.imageName.isEmpty {
-                Image(shape.imageName)
-                  .resizable()
-                  .aspectRatio(contentMode: .fit)
-                  .frame(width: 60, height: 60)
-                  .clipShape(RoundedRectangle(cornerRadius: 4))
-              }
+              Image(shape.imageName)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 60, height: 60)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
             }
           } else {
-            // Empty slot - no indicator
             EmptyView()
           }
         }
@@ -334,8 +349,11 @@ struct PatternDropSlot: View {
           onRemove()
         }
       }
-      .onDrop(of: [.text], isTargeted: .constant(false)) { providers in
+      .onDrop(of: [.text], isTargeted: $isTargeted) { providers in
         handleDrop(providers: providers)
+      }
+      .onChange(of: isTargeted) { _, targeted in
+        onHoverChange(targeted)
       }
   }
 
@@ -343,34 +361,20 @@ struct PatternDropSlot: View {
     guard let provider = providers.first else { return false }
 
     provider.loadObject(ofClass: NSString.self) { (object, error) in
-      if let idString = object as? String,
-        let id = Int(idString),
-        let shape = getShapeById(id)
-      {
-        DispatchQueue.main.async {
-          onDrop(shape)
+      if let shapeString = object as? String {
+        // Parse the shape string format "type:id"
+        let components = shapeString.components(separatedBy: ":")
+        if components.count == 2,
+          let id = Int(components[1]),
+          let shape = availableShapes.first(where: { $0.type == components[0] && $0.id == id })
+        {
+          DispatchQueue.main.async {
+            onDrop(shape)
+          }
         }
       }
     }
     return true
-  }
-
-  private func getShapeById(_ id: Int) -> ShapeItem? {
-    let patternSets: [String: Int] = [
-      "Animals": 59
-    ]
-
-    let randomSetName = patternSets.keys.randomElement() ?? "Animals"
-    let maxImages = patternSets[randomSetName] ?? 1
-    let randomImageNumber = Int.random(in: 1...maxImages)
-    let imageName = "\(randomSetName)/\(randomImageNumber)"
-
-    return ShapeItem(
-      id: id,
-      imageName: imageName,
-      color: Color.clear,
-      name: "\(randomSetName) \(randomImageNumber)"
-    )
   }
 }
 
@@ -378,54 +382,60 @@ struct DraggableShapeView: View {
   let shape: ShapeItem
   let isAlreadyInPattern: Bool
   let isSelected: Bool
+  let isDragging: Bool
   let onDragStart: () -> Void
   let onDragEnd: () -> Void
   let onTap: () -> Void
 
   var body: some View {
     VStack(spacing: 5) {
-      if !shape.imageName.isEmpty {
-        Image(shape.imageName)
-          .resizable()
-          .aspectRatio(contentMode: .fit)
-          .frame(width: 60, height: 60)
-          .clipShape(RoundedRectangle(cornerRadius: 8))
-      } else {
-        RoundedRectangle(cornerRadius: 8)
-          .fill(Color.gray.opacity(0.3))
-          .frame(width: 60, height: 60)
-          .overlay(
-            Text("No Image")
-              .font(.caption2)
-              .foregroundColor(.gray)
-          )
-      }
+      Image(shape.imageName)
+        .resizable()
+        .aspectRatio(contentMode: .fit)
+        .frame(width: 60, height: 60)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
-    .scaleEffect(0.9)
-    .opacity(isAlreadyInPattern ? 0.5 : 1.0)
+    .scaleEffect(isDragging ? 0.8 : 0.9)
+    .opacity(isAlreadyInPattern ? 0.3 : (isDragging ? 0.7 : 1.0))
     .overlay(
-      // Selection indicator
-      isSelected
+      // Selection indicator - only show when selected and not already in pattern
+      isSelected && !isAlreadyInPattern
         ? RoundedRectangle(cornerRadius: 8)
           .stroke(Color.blue, lineWidth: 3)
           .background(Color.blue.opacity(0.2))
-        :  // Visual indicator if already used
-        isAlreadyInPattern
-          ? RoundedRectangle(cornerRadius: 8)
-            .stroke(Color.gray, lineWidth: 2)
-            .background(Color.gray.opacity(0.3))
-          : nil
+        : nil
     )
+    .animation(.easeInOut(duration: 0.2), value: isDragging)
+    .animation(.easeInOut(duration: 0.2), value: isSelected)
     .onTapGesture {
-      onTap()
+      if !isAlreadyInPattern {
+        onTap()
+      }
     }
-    .onDrag {
-      onDragStart()
-      return NSItemProvider(object: "\(shape.id)" as NSString)
+    .draggable("\(shape.type):\(shape.id)") {
+      // Drag preview
+      DragPreview(shape: shape)
+        .onAppear { onDragStart() }
+        .onDisappear { onDragEnd() }
     }
-    .onDragEnd {
-      onDragEnd()
+  }
+}
+
+struct DragPreview: View {
+  let shape: ShapeItem
+
+  var body: some View {
+    VStack(spacing: 5) {
+      Image(shape.imageName)
+        .resizable()
+        .aspectRatio(contentMode: .fit)
+        .frame(width: 50, height: 50)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
     }
+    .padding(8)
+    .background(Color.white.opacity(0.9))
+    .cornerRadius(8)
+    .shadow(radius: 5)
   }
 }
 
@@ -434,59 +444,22 @@ struct DraggableShape: View {
 
   var body: some View {
     VStack(spacing: 5) {
-      if !shape.imageName.isEmpty {
-        Image(shape.imageName)
-          .resizable()
-          .aspectRatio(contentMode: .fit)
-          .frame(width: 60, height: 60)
-          .clipShape(RoundedRectangle(cornerRadius: 8))
-      }
-
-      Text(shape.name)
-        .font(.caption)
-        .foregroundColor(.primary)
+      Image(shape.imageName)
+        .resizable()
+        .aspectRatio(contentMode: .fit)
+        .frame(width: 60, height: 60)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
     .scaleEffect(0.9)
     .opacity(0.8)
   }
 }
 
-// MARK: - Data Models
-
-struct ShapeItem: Identifiable, Equatable {
+struct ShapeItem: Identifiable, Equatable, Codable {
+  let type: String
   let id: Int
-  let imageName: String
-  let color: Color
-  let name: String
-}
 
-// MARK: - View Extensions
-
-extension View {
-  func onDragEnd(_ action: @escaping () -> Void) -> some View {
-    self.onEnded(action)
-  }
-
-  private func onEnded(_ action: @escaping () -> Void) -> some View {
-    self.background(
-      DragEndDetector(onDragEnd: action)
-    )
-  }
-}
-
-struct DragEndDetector: View {
-  let onDragEnd: () -> Void
-
-  var body: some View {
-    Rectangle()
-      .fill(Color.clear)
-      .frame(width: 0, height: 0)
-      .onReceive(
-        NotificationCenter.default.publisher(
-          for: .NSManagedObjectContextObjectsDidChange
-        )
-      ) { _ in
-        onDragEnd()
-      }
+  var imageName: String {
+    "\(type)/\(id)"
   }
 }

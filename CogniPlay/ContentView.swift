@@ -3,17 +3,23 @@ import SwiftUI
 // MARK: - Main App Structure
 struct ContentView: View {
   @State private var showingTerms = false
-  @State private var termsAccepted = false
+
+  // Persistent state variables using @AppStorage
+  @AppStorage("termsAccepted") private var termsAccepted = false
+  @AppStorage("whackAMoleScore") private var whackAMoleScore: Double = 0
+  @AppStorage("simonScore") private var simonScore: Int = 0
+  @AppStorage("speechScore") private var speechScore: Double = 0
+
+  @AppStorage("currentPatternData") private var currentPatternData: Data = Data()
+
   @State private var currentView: AppView = .home
-
-  @State private var currentPattern: [Int] = []
-  @State private var whackAMoleScore: Double = 0
-  @State private var simonScore: Int = 0
-
   @StateObject private var sessionManager = SessionManager.shared
 
+  // State variable for the current pattern that syncs with AppStorage
+  @State private var currentPattern: [ShapeItem] = []
+
   enum AppView {
-    case home, sessionChecklist, setupPattern, speech, simon, whackAMole  //, testPattern
+    case home, sessionChecklist, about, setupPattern, speech, simon, whackAMole, testPattern
   }
 
   var body: some View {
@@ -23,7 +29,6 @@ struct ContentView: View {
         // Background color that extends beyond safe area
         Color.white
           .ignoresSafeArea(.all)
-
         VStack(spacing: 0) {
           // Main Content with safe area padding
           Group {
@@ -38,29 +43,29 @@ struct ContentView: View {
               SessionChecklistView(
                 currentView: $currentView
               )
+            case .about:
+              AboutView(currentView: $currentView)
             case .setupPattern:
               SetupPatternView(
                 currentView: $currentView,
                 currentPattern: $currentPattern
               )
             case .speech:
-              SpeechView(currentView: $currentView)
+              SpeechView(currentView: $currentView, speechScore: $speechScore)
             case .simon:
               SimonView(currentView: $currentView, simonScore: $simonScore)
             case .whackAMole:
               WhackAMoleView(
                 currentView: $currentView,
                 whackAMoleScore: $whackAMoleScore)
-            /*case .testPattern:
-             TestPatternView(currentView: $currentView, currentPattern: $currentPattern)*/
+            case .testPattern:
+              TestPatternView(currentView: $currentView, currentPattern: $currentPattern)
             }
           }
           .frame(maxWidth: .infinity, maxHeight: .infinity)
-          // 1. Add a transition to specify the animation effect (fade)
           .transition(.opacity)
         }
       }
-      // 2. Add an animation modifier that listens for changes to a specific value
       .animation(.easeInOut(duration: 0.2), value: currentView)
       .sheet(isPresented: $showingTerms) {
         TermsOfServiceView(
@@ -70,6 +75,35 @@ struct ContentView: View {
         )
         .buttonStyle(DefaultButtonStyle())
       }
+    }
+    .onAppear {
+      loadCurrentPattern()
+    }
+    .onChange(of: currentPattern) { _ in
+      saveCurrentPattern()
+    }
+  }
+
+  // MARK: - Pattern Persistence Methods
+  private func loadCurrentPattern() {
+    guard !currentPatternData.isEmpty else {
+      currentPattern = []
+      return
+    }
+
+    do {
+      currentPattern = try JSONDecoder().decode([ShapeItem].self, from: currentPatternData)
+    } catch {
+      currentPattern = []
+      currentPatternData = Data()
+    }
+  }
+
+  private func saveCurrentPattern() {
+    do {
+      currentPatternData = try JSONEncoder().encode(currentPattern)
+    } catch {
+      print("Failed to encode current pattern: \(error)")
     }
   }
 }
@@ -86,7 +120,7 @@ struct PersistentNavBar: View {
         Image(systemName: "house.fill")
           .font(.title2)
           .foregroundColor(.black)
-          .frame(width: 44, height: 44)  // Standard touch target size
+          .frame(width: 44, height: 44)
       }
       .padding(.horizontal, 22)
 
@@ -98,15 +132,15 @@ struct PersistentNavBar: View {
         Image(systemName: "gearshape.fill")
           .font(.title2)
           .foregroundColor(.black)
-          .frame(width: 44, height: 44)  // Standard touch target size
+          .frame(width: 44, height: 44)
       }
       .padding(.horizontal, 22)
     }
-    .frame(height: 44)  // Consistent height
+    .frame(height: 44)
     .padding(.horizontal, 20)
-    .padding(.top, 15)  // Add top padding to account for status bar and notch
+    .padding(.top, 15)
     .padding(.bottom, 15)
     .background(Color.gray.opacity(0.15))
-    .ignoresSafeArea(.container, edges: .top)  // Extend beyond safe area at top
+    .ignoresSafeArea(.container, edges: .top)
   }
 }

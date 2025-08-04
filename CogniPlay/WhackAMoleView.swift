@@ -115,7 +115,12 @@ struct WhackAMoleView: View {
         } else if gameCompleted {
           stopGame()
           whackAMoleScore = moleLifespanData.reduce(0, +) / Double(moleLifespanData.count)
-          sessionManager.completeTask("whack")
+          sessionManager.completeTask(
+            "whack",
+            withScore: WhackAMoleScore(
+              score: whackAMoleScore
+            )
+          )
           currentView = .sessionChecklist
         }
         // Do nothing if game is active (button shows countdown)

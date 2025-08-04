@@ -1,623 +1,552 @@
-//
-//  TestPatternView.swift
-//  CogniPlay
-//
-//  Created by Lucas Lum on 7/28/25.
-//
-/*
-import SwiftUI
 import Darwin
+import SwiftUI
 
 // MARK: - Test Pattern Game View
 struct TestPatternView: View {
-    @Binding var currentView: ContentView.AppView
-    @Binding var currentPattern: [Int]
+  @Binding var currentView: ContentView.AppView
+  @Binding var currentPattern: [ShapeItem]
+  @ObservedObject private var sessionManager = SessionManager.shared
 
-    @State private var availableShapes: [ShapeItem] = []
-    @State private var userPattern: [ShapeItem] = []
-    @State private var draggedShape: ShapeItem?
-    @State private var hoveredSlot: Int?
-    @State private var selectedShape: ShapeItem?
-    @State private var isSelectionMode: Bool = false
-    @State private var showResults = false
-    @State private var testResults: TestResults?
-    @State private var isTestCompleted = false
+  @State private var availableShapes: [ShapeItem] = []
+  @State private var selectedOrder: [ShapeItem] = []
+  @State private var draggedShape: ShapeItem?
+  @State private var hoveredSlot: Int?
+  @State private var selectedShape: ShapeItem?
+  @State private var isTestComplete = false
+  @State private var testResult: Int = 0  // Fixed: Added default value
 
-    var body: some View {
-        VStack(spacing: 0) {
-            // Header with title
-            VStack(spacing: 20) {
-                Text("Testing")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                    .foregroundColor(.black)
+  private var isSelectionComplete: Bool {
+    selectedOrder.count == 5 && !selectedOrder.contains { $0.id == -1 }
+  }
 
-                if currentPattern.isEmpty {
-                    Text("No pattern set!")
-                        .font(.title2)
-                        .fontWeight(.medium)
-                        .foregroundColor(.red)
-                } else {
-                    Text("Recreate the Pattern")
-                        .font(.title2)
-                        .fontWeight(.medium)
-                        .foregroundColor(.black)
+  var body: some View {
+    VStack(spacing: 0) {
+      // Header with title
+      VStack(spacing: 20) {
+        Text("Memory Test")
+          .font(.largeTitle)
+          .fontWeight(.bold)
+          .foregroundColor(.black)
+
+        Text("Recreate the pattern you just learned")
+          .font(.title3)
+          .fontWeight(.medium)
+          .foregroundColor(.black)
+      }
+      .padding(.top, 40)
+      .padding(.bottom, 20)
+
+      Spacer()
+
+      // Selected Order Area - Main drop zones
+      VStack(spacing: 20) {
+        // Top row - 3 slots
+        HStack(spacing: 20) {
+          ForEach(0..<3) { index in
+            TestDropSlot(
+              shape: index < selectedOrder.count ? selectedOrder[index] : nil,
+              index: index,
+              isHovered: hoveredSlot == index,
+              selectedShape: selectedShape,
+              availableShapes: availableShapes,
+              correctShape: index < currentPattern.count ? currentPattern[index] : nil,
+              showResult: isTestComplete,
+              onRemove: { removeFromSelection(at: index) },
+              onDrop: { shape in
+                handleDropInSlot(shape: shape, at: index)
+              },
+              onTap: {
+                if let selectedShape = selectedShape {
+                  handleDropInSlot(shape: selectedShape, at: index)
+                  self.selectedShape = nil
                 }
+              },
+              onHoverChange: { isHovered in
+                hoveredSlot = isHovered ? index : nil
+              }
+            )
+          }
+        }
 
-                // Mode toggle for simulator testing
-                if !currentPattern.isEmpty && !isTestCompleted {
-                    HStack {
-                        Button(isSelectionMode ? "Switch to Drag Mode" : "Switch to Tap Mode") {
-                            isSelectionMode.toggle()
-                            selectedShape = nil
-                        }
-                        .font(.caption)
-                        .foregroundColor(.blue)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.blue.opacity(0.1))
-                        .cornerRadius(8)
-                    }
-
-                    if isSelectionMode {
-                        Text("Tap a shape, then tap a slot")
-                            .font(.caption)
-                            .foregroundColor(.gray)
-                    }
+        // Bottom row - 2 slots
+        HStack(spacing: 20) {
+          ForEach(3..<5) { index in
+            TestDropSlot(
+              shape: index < selectedOrder.count ? selectedOrder[index] : nil,
+              index: index,
+              isHovered: hoveredSlot == index,
+              selectedShape: selectedShape,
+              availableShapes: availableShapes,
+              correctShape: index < currentPattern.count ? currentPattern[index] : nil,
+              showResult: isTestComplete,
+              onRemove: { removeFromSelection(at: index) },
+              onDrop: { shape in
+                handleDropInSlot(shape: shape, at: index)
+              },
+              onTap: {
+                if let selectedShape = selectedShape {
+                  handleDropInSlot(shape: selectedShape, at: index)
+                  self.selectedShape = nil
                 }
-            }
-            .padding(.top, 40)
-            .padding(.bottom, 40)
+              },
+              onHoverChange: { isHovered in
+                hoveredSlot = isHovered ? index : nil
+              }
+            )
+          }
+        }
+      }
+      .padding(.horizontal, 40)
+      .padding(.bottom, 20)
 
-            // Progress indicator
-            if !currentPattern.isEmpty && !isTestCompleted {
-                Text("Progress: \(userPattern.count)/\(currentPattern.count)")
-                    .font(.subheadline)
-                    .foregroundColor(.blue)
-                    .padding(.bottom, 20)
-            }
+      Spacer()
 
-            Spacer()
+      // Test Result Display
+      if isTestComplete {
+        VStack(spacing: 10) {
+          Text("Test Complete!")
+            .font(.title2)
+            .fontWeight(.bold)
+            .foregroundColor(getScoreColor(for: testResult))
 
-            // User's Pattern Area - Main drop zones
-            VStack(spacing: 30) {
-                // Top row - 3 slots
-                HStack(spacing: 20) {
-                    ForEach(0..<3) { index in
-                        TestPatternSlot(
-                            shape: index < userPattern.count ? userPattern[index] : nil,
-                            index: index,
-                            isCorrect: isTestCompleted ? (index < currentPattern.count && index < userPattern.count && userPattern[index].id == currentPattern[index]) : nil,
-                            isHovered: hoveredSlot == index,
-                            isSelectionMode: isSelectionMode,
-                            onRemove: { removeFromUserPattern(at: index) },
-                            onDrop: { shape in handleDropInSlot(shape: shape, at: index) },
-                            onTap: {
-                                if isSelectionMode, let selectedShape = selectedShape {
-                                    handleDropInSlot(shape: selectedShape, at: index)
-                                    self.selectedShape = nil
-                                }
-                            }
-                        )
-                    }
-                }
+          Text("Score: \(Int(Double(testResult) / 5.0 * 100))%")
+            .font(.title3)
+            .fontWeight(.medium)
 
-                // Bottom row - 2 slots
-                HStack(spacing: 20) {
-                    ForEach(3..<5) { index in
-                        TestPatternSlot(
-                            shape: index < userPattern.count ? userPattern[index] : nil,
-                            index: index,
-                            isCorrect: isTestCompleted ? (index < currentPattern.count && index < userPattern.count && userPattern[index].id == currentPattern[index]) : nil,
-                            isHovered: hoveredSlot == index,
-                            isSelectionMode: isSelectionMode,
-                            onRemove: { removeFromUserPattern(at: index) },
-                            onDrop: { shape in handleDropInSlot(shape: shape, at: index) },
-                            onTap: {
-                                if isSelectionMode, let selectedShape = selectedShape {
-                                    handleDropInSlot(shape: selectedShape, at: index)
-                                    self.selectedShape = nil
-                                }
-                            }
-                        )
-                    }
-                }
-            }
+          Text("\(testResult) out of 5 correct")
+            .font(.body)
+            .foregroundColor(.gray)
+        }
+        .padding(.bottom, 20)
+      }
+
+      // Available Shapes
+      if !isTestComplete {
+        VStack(alignment: .leading, spacing: 15) {
+          Text("Available Objects:")
+            .font(.headline)
             .padding(.horizontal, 40)
 
-            Spacer()
-
-            // Results Section
-            if showResults, let results = testResults {
-                TestResultsView(results: results)
-                    .transition(.opacity)
-                    .padding(.bottom, 20)
-            }
-
-            // Available Shapes
-            if !isTestCompleted {
-                VStack(alignment: .leading, spacing: 15) {
-                    Text("Available Shapes:")
-                        .font(.headline)
-                        .padding(.horizontal, 40)
-
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4), spacing: 15) {
-                        ForEach(availableShapes, id: \.id) { shape in
-                            TestDraggableShapeView(
-                                shape: shape,
-                                isAlreadyInPattern: userPattern.contains(where: { $0.id == shape.id }),
-                                isSelected: selectedShape?.id == shape.id,
-                                isSelectionMode: isSelectionMode,
-                                onDragStart: { draggedShape = shape },
-                                onDragEnd: { draggedShape = nil },
-                                onTap: {
-                                    if isSelectionMode {
-                                        selectedShape = selectedShape?.id == shape.id ? nil : shape
-                                    }
-                                }
-                            )
-                        }
-                    }
-                    .padding(.horizontal, 40)
+          LazyVGrid(
+            columns: Array(
+              repeating: GridItem(.flexible(), spacing: 10),
+              count: 4
+            ),
+            spacing: 15
+          ) {
+            ForEach(availableShapes, id: \.id) { shape in
+              TestDraggableShapeView(
+                shape: shape,
+                isAlreadySelected: selectedOrder.contains(where: {
+                  $0.id == shape.id && $0.type == shape.type
+                }),
+                isSelected: selectedShape?.id == shape.id && selectedShape?.type == shape.type,
+                isDragging: draggedShape?.id == shape.id && draggedShape?.type == shape.type,
+                onDragStart: {
+                  if !selectedOrder.contains(where: { $0.id == shape.id && $0.type == shape.type })
+                  {
+                    draggedShape = shape
+                    selectedShape = nil
+                  }
+                },
+                onDragEnd: {
+                  draggedShape = nil
+                },
+                onTap: {
+                  if !selectedOrder.contains(where: { $0.id == shape.id && $0.type == shape.type })
+                  {
+                    let isSameShape =
+                      selectedShape?.id == shape.id && selectedShape?.type == shape.type
+                    selectedShape = isSameShape ? nil : shape
+                  }
                 }
-                .padding(.bottom, 20)
+              )
             }
-
-            // Action Button
-            if !isTestCompleted {
-                HStack(spacing: 20) {
-                    Button("Clear All") {
-                        clearUserPattern()
-                    }
-                    .font(.title2)
-                    .fontWeight(.medium)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .background(Color.red.opacity(0.7))
-                    .cornerRadius(10)
-
-                    Button("Submit") {
-                        submitTest()
-                    }
-                    .font(.title2)
-                    .fontWeight(.medium)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .background(userPattern.count == currentPattern.count ? Color.blue : Color.gray)
-                    .cornerRadius(10)
-                    .disabled(userPattern.count != currentPattern.count)
-                }
-                .padding(.horizontal, 40)
-                .padding(.bottom, 50)
-            } else {
-                VStack(spacing: 15) {
-                    Button("Test Again") {
-                        resetTest()
-                    }
-                    .font(.title2)
-                    .fontWeight(.medium)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .background(Color.blue)
-                    .cornerRadius(10)
-                    .padding(.horizontal, 40)
-
-                    Button("Back to Home") {
-                        currentView = .home
-                    }
-                    .font(.title2)
-                    .fontWeight(.medium)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .background(Color.green.opacity(0.7))
-                    .cornerRadius(10)
-                    .padding(.horizontal, 40)
-                }
-                .padding(.bottom, 50)
-            }
+          }
+          .padding(.horizontal, 40)
         }
-        .background(Color.white)
-        .onAppear {
-            setupShapes()
-            resetTest()
+        .padding(.bottom, 20)
+      }
+
+      // Control Buttons
+      HStack(spacing: 20) {
+        if !isTestComplete {
+          Button("Clear All") {
+            clearSelection()
+          }
+          .font(.title2)
+          .fontWeight(.medium)
+          .foregroundColor(.white)
+          .frame(maxWidth: .infinity)
+          .frame(height: 50)
+          .background(Color.red.opacity(0.7))
+          .cornerRadius(10)
+
+          Button("Submit") {
+            if isSelectionComplete {
+              submitTest()
+            }
+          }
+          .font(.title2)
+          .fontWeight(.medium)
+          .foregroundColor(.white)
+          .frame(maxWidth: .infinity)
+          .frame(height: 50)
+          .background(isSelectionComplete ? Color.blue.opacity(0.7) : Color.blue.opacity(0.3))
+          .cornerRadius(10)
+          .disabled(!isSelectionComplete)
+        } else {
+          Button("Continue") {
+            sessionManager.completeTask("test")
+            currentView = .sessionChecklist
+          }
+          .font(.title2)
+          .fontWeight(.medium)
+          .foregroundColor(.white)
+          .frame(maxWidth: .infinity)
+          .frame(height: 50)
+          .background(Color.green.opacity(0.7))
+          .cornerRadius(10)
         }
+      }
+      .padding(.horizontal, 40)
+      .padding(.bottom, 50)
     }
-
-    // MARK: - Helper Methods
-
-    private func setupShapes() {
-        availableShapes = [
-            ShapeItem(id: 1, sides: 3, color: .red, name: "Triangle"),
-            ShapeItem(id: 2, sides: 4, color: .blue, name: "Square"),
-            ShapeItem(id: 3, sides: 5, color: .green, name: "Pentagon"),
-            ShapeItem(id: 4, sides: 6, color: .orange, name: "Hexagon"),
-            ShapeItem(id: 5, sides: 7, color: .purple, name: "Heptagon"),
-            ShapeItem(id: 6, sides: 8, color: .pink, name: "Octagon"),
-            ShapeItem(id: 7, sides: 9, color: .yellow, name: "Nonagon"),
-            ShapeItem(id: 8, sides: 10, color: .cyan, name: "Decagon")
-        ]
+    .background(Color.white)
+    .onAppear {
+      setupTestShapes()
     }
-
-    private func resetTest() {
-        userPattern.removeAll()
-        showResults = false
-        testResults = nil
-        isTestCompleted = false
+    .onTapGesture {
+      if !isTestComplete {
         selectedShape = nil
-        hoveredSlot = nil
+      }
     }
+  }
 
-    private func clearUserPattern() {
-        userPattern.removeAll()
-        selectedShape = nil
+  // MARK: - Helper Methods
+
+  private func getScoreColor(for score: Int) -> Color {
+    let percentage = Double(score) / 5.0
+    if percentage >= 0.8 {
+      return .green
+    } else if percentage >= 0.6 {
+      return .orange
+    } else {
+      return .red
     }
+  }
 
-    private func removeFromUserPattern(at index: Int) {
-        if !isTestCompleted && index < userPattern.count {
-            userPattern.remove(at: index)
-        }
-    }
+  private func setupTestShapes() {
+    // Start with the 5 objects from currentPattern
+    var testShapes = currentPattern
 
-    private func handleDropInSlot(shape: ShapeItem, at index: Int) {
-        guard !isTestCompleted else { return }
+    // Generate 3 additional different shapes
+    let additionalShapes = generateAdditionalShapes(excluding: currentPattern)
+    testShapes.append(contentsOf: additionalShapes)
 
-        // Don't allow duplicate shapes in the pattern
-        if userPattern.contains(where: { $0.id == shape.id }) {
-            return
-        }
+    // Shuffle the list
+    availableShapes = testShapes.shuffled()
+  }
 
-        // Ensure the userPattern array is large enough
-        while userPattern.count <= index {
-            userPattern.append(ShapeItem(id: -1, sides: 0, color: .clear, name: "Empty"))
-        }
+  private func generateAdditionalShapes(excluding existingShapes: [ShapeItem]) -> [ShapeItem] {
+    let patternSets: [String: Int] = [
+      "Animals": 59
+    ]
 
-        // If there's already a shape at this position and it's not empty, shift it
-        if index < userPattern.count && userPattern[index].id != -1 {
-            // Find the next empty slot or append at the end
-            var nextEmptyIndex = -1
-            for i in 0..<min(currentPattern.count, 5) {
-                if i >= userPattern.count || userPattern[i].id == -1 {
-                    nextEmptyIndex = i
-                    break
-                }
-            }
+    var shapes: [ShapeItem] = []
+    var usedImageIDs: Set<String> = Set(existingShapes.map { "\($0.type):\($0.id)" })
+    var attempts = 0
+    let maxAttempts = 100  // Safety check to prevent infinite loop
 
-            if nextEmptyIndex != -1 && nextEmptyIndex < min(currentPattern.count, 5) {
-                while userPattern.count <= nextEmptyIndex {
-                    userPattern.append(ShapeItem(id: -1, sides: 0, color: .clear, name: "Empty"))
-                }
-                userPattern[nextEmptyIndex] = userPattern[index]
-            }
-        }
+    while shapes.count < 3 && attempts < maxAttempts {
+      let randomSetName = patternSets.keys.randomElement() ?? "Animals"
+      let maxImages = patternSets[randomSetName] ?? 1
+      let randomImageID = Int.random(in: 1...maxImages)
+      let uniqueKey = "\(randomSetName):\(randomImageID)"
 
-        // Place the new shape
-        userPattern[index] = shape
-
-        // Remove empty placeholders at the end
-        while userPattern.last?.id == -1 {
-            userPattern.removeLast()
-        }
-    }
-
-    private func handleDrop(providers: [NSItemProvider]) -> Bool {
-        guard !isTestCompleted else { return false }
-        guard let provider = providers.first else { return false }
-
-        provider.loadObject(ofClass: NSString.self) { (object, error) in
-            if let idString = object as? String,
-               let id = Int(idString),
-               let shape = availableShapes.first(where: { $0.id == id }) {
-                DispatchQueue.main.async {
-                    if userPattern.count < min(currentPattern.count, 5) && !userPattern.contains(where: { $0.id == id }) {
-                        userPattern.append(shape)
-                    }
-                }
-            }
-        }
-        return true
-    }
-
-    private func submitTest() {
-        guard userPattern.count == currentPattern.count else { return }
-
-        let results = gradeTest()
-        testResults = results
-        isTestCompleted = true
-
-        withAnimation(.easeInOut(duration: 0.5)) {
-            showResults = true
-        }
-    }
-
-    // MARK: - Hamming Distance Grading Scheme
-
-    private func gradeTest() -> TestResults {
-        let targetPattern = currentPattern.compactMap { id in
-            availableShapes.first { $0.id == id }
-        }
-
-        // Calculate Hamming distance (number of positions where shapes differ)
-        var hammingDistance = 0
-        var positionErrors: [Int] = []
-        var shapeErrors: [Int] = []
-
-        // Compare each position (guaranteed same length)
-        for i in 0..<currentPattern.count {
-            if userPattern[i].id != targetPattern[i].id {
-                hammingDistance += 1
-                positionErrors.append(i)
-
-                // If user shape doesn't exist in target at all, it's also a shape error
-                if !targetPattern.contains(where: { $0.id == userPattern[i].id }) {
-                    shapeErrors.append(i)
-                }
-            }
-        }
-
-        // Calculate accuracy as percentage
-        let accuracy = Double(currentPattern.count - hammingDistance) / Double(currentPattern.count)
-
-        // Count correct positions and shapes for display
-        let correctPositions = currentPattern.count - hammingDistance
-        var correctShapes = 0
-        for userShape in userPattern {
-            if targetPattern.contains(where: { $0.id == userShape.id }) {
-                correctShapes += 1
-            }
-        }
-
-        return TestResults(
-            totalShapes: currentPattern.count,
-            correctPositions: correctPositions,
-            correctShapes: correctShapes,
-            positionAccuracy: accuracy,
-            shapeAccuracy: Double(correctShapes) / Double(currentPattern.count),
-            overallScore: accuracy, // Use Hamming-based accuracy as overall score
-            positionErrors: positionErrors,
-            shapeErrors: shapeErrors,
-            userPattern: userPattern.map { $0.id },
-            targetPattern: currentPattern
+      if !usedImageIDs.contains(uniqueKey) {
+        usedImageIDs.insert(uniqueKey)
+        shapes.append(
+          ShapeItem(
+            type: randomSetName,
+            id: randomImageID
+          )
         )
+      }
+      attempts += 1
     }
+
+    // If we couldn't generate 3 unique shapes, fill with fallback shapes
+    while shapes.count < 3 {
+      let fallbackShape = ShapeItem(
+        type: "Animals",
+        id: Int.random(in: 1...59)
+      )
+      if !usedImageIDs.contains("\(fallbackShape.type):\(fallbackShape.id)") {
+        shapes.append(fallbackShape)
+        usedImageIDs.insert("\(fallbackShape.type):\(fallbackShape.id)")
+      }
+    }
+
+    return shapes
+  }
+
+  private func clearSelection() {
+    selectedOrder.removeAll()
+    selectedShape = nil
+  }
+
+  private func removeFromSelection(at index: Int) {
+    if index < selectedOrder.count {
+      selectedOrder.remove(at: index)
+    }
+  }
+
+  private func handleDropInSlot(shape: ShapeItem, at index: Int) {
+    // Don't allow duplicate shapes in the selection
+    if selectedOrder.contains(where: { $0.id == shape.id && $0.type == shape.type }) {
+      return
+    }
+
+    // Ensure the selectedOrder array is large enough
+    while selectedOrder.count <= index {
+      selectedOrder.append(
+        ShapeItem(type: "", id: -1)
+      )
+    }
+
+    // If there's already a shape at this position and it's not empty, shift it
+    if index < selectedOrder.count && selectedOrder[index].id != -1 {
+      // Find the next empty slot or append at the end
+      var nextEmptyIndex = -1
+      for i in 0..<5 {
+        if i >= selectedOrder.count || selectedOrder[i].id == -1 {
+          nextEmptyIndex = i
+          break
+        }
+      }
+
+      if nextEmptyIndex != -1 && nextEmptyIndex < 5 {
+        while selectedOrder.count <= nextEmptyIndex {
+          selectedOrder.append(
+            ShapeItem(type: "", id: -1)
+          )
+        }
+        selectedOrder[nextEmptyIndex] = selectedOrder[index]
+      }
+    }
+
+    // Place the new shape
+    selectedOrder[index] = shape
+
+    // Remove empty placeholders at the end
+    while selectedOrder.last?.id == -1 {
+      selectedOrder.removeLast()
+    }
+  }
+
+  private func submitTest() {
+    testResult = evaluateTest()
+    isTestComplete = true
+
+    // Fixed: Create a proper score object or just pass the integer
+    sessionManager.completeTask("test", withScore: TestPatternScore(score: testResult))
+  }
+
+  private func evaluateTest() -> Int {
+    var correctCount = 0
+
+    for (index, selectedShape) in selectedOrder.enumerated() {
+      if index < currentPattern.count {
+        let correctShape = currentPattern[index]
+        if selectedShape.id == correctShape.id && selectedShape.type == correctShape.type {
+          correctCount += 1
+        }
+      }
+    }
+
+    return correctCount
+  }
 }
 
-// MARK: - Supporting Views
+struct TestDropSlot: View {
+  let shape: ShapeItem?
+  let index: Int
+  let isHovered: Bool
+  let selectedShape: ShapeItem?
+  let availableShapes: [ShapeItem]
+  let correctShape: ShapeItem?
+  let showResult: Bool
+  let onRemove: () -> Void
+  let onDrop: (ShapeItem) -> Void
+  let onTap: () -> Void
+  let onHoverChange: (Bool) -> Void
 
-struct TestPatternSlot: View {
-    let shape: ShapeItem?
-    let index: Int
-    let isCorrect: Bool?
-    let isHovered: Bool
-    let isSelectionMode: Bool
-    let onRemove: () -> Void
-    let onDrop: (ShapeItem) -> Void
-    let onTap: () -> Void
+  @State private var isTargeted = false
 
-    var body: some View {
+  private var isTargetForSelection: Bool {
+    selectedShape != nil && (shape == nil || shape?.id == -1)
+  }
+
+  private var isCorrect: Bool {
+    guard showResult, let shape = shape, let correctShape = correctShape else { return false }
+    return shape.id == correctShape.id && shape.type == correctShape.type
+  }
+
+  private var borderColor: Color {
+    if showResult {
+      return isCorrect ? .green : .red
+    }
+    return isTargetForSelection ? .blue : (isHovered || isTargeted) ? .blue : .black
+  }
+
+  private var backgroundColor: Color {
+    if showResult {
+      return isCorrect ? Color.green.opacity(0.1) : Color.red.opacity(0.1)
+    }
+    return isTargetForSelection
+      ? Color.blue.opacity(0.1) : (isHovered || isTargeted) ? Color.blue.opacity(0.1) : Color.white
+  }
+
+  var body: some View {
+    RoundedRectangle(cornerRadius: 8)
+      .stroke(
+        borderColor,
+        lineWidth: showResult ? 4 : (isTargetForSelection || isHovered || isTargeted) ? 3 : 2
+      )
+      .frame(width: 80, height: 80)
+      .background(
         RoundedRectangle(cornerRadius: 8)
-            .stroke(borderColor, lineWidth: borderWidth)
-            .frame(width: 80, height: 80)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(backgroundColor)
-            )
-            .overlay(
-                Group {
-                    if let shape = shape, shape.id != -1 {
-                        ZStack {
-                            PolygonShape(sides: shape.sides)
-                                .fill(shape.color)
-                                .frame(width: 60, height: 60)
+          .fill(backgroundColor)
+      )
+      .overlay(
+        Group {
+          if let shape = shape, shape.id != -1 {
+            ZStack {
+              Image(shape.imageName)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 60, height: 60)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
 
-                            Text("\(shape.id)")
-                                .font(.title2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.white)
-                        }
-                    } else {
-                        // Empty slot indicator
-                        Text("\(index + 1)")
-                            .font(.caption)
-                            .foregroundColor(.gray)
-                            .opacity(0.5)
-                    }
+              // Show correct/incorrect indicator
+              if showResult {
+                VStack {
+                  Spacer()
+                  HStack {
+                    Spacer()
+                    Image(systemName: isCorrect ? "checkmark.circle.fill" : "xmark.circle.fill")
+                      .foregroundColor(isCorrect ? .green : .red)
+                      .background(Color.white)
+                      .clipShape(Circle())
+                      .font(.system(size: 16))
+                  }
                 }
-            )
-            .onTapGesture {
-                if isSelectionMode {
-                    onTap()
-                } else if shape != nil && shape?.id != -1 {
-                    onRemove()
-                }
+                .padding(4)
+              }
             }
-            .onDrop(of: [.text], isTargeted: .constant(false)) { providers in
-                handleDrop(providers: providers)
-            }
-    }
-
-    private var borderColor: Color {
-        if let isCorrect = isCorrect {
-            return isCorrect ? .green : .red
+          } else {
+            EmptyView()
+          }
         }
-        return isHovered ? .blue : .black
-    }
-
-    private var borderWidth: CGFloat {
-        if isCorrect != nil {
-            return 3
+      )
+      .onTapGesture {
+        if !showResult {
+          if selectedShape != nil {
+            onTap()
+          } else if shape != nil && shape?.id != -1 {
+            onRemove()
+          }
         }
-        return isHovered ? 3 : 2
-    }
-
-    private var backgroundColor: Color {
-        if let isCorrect = isCorrect {
-            return isCorrect ? Color.green.opacity(0.1) : Color.red.opacity(0.1)
+      }
+      .onDrop(of: [.text], isTargeted: $isTargeted) { providers in
+        showResult ? false : handleDrop(providers: providers)
+      }
+      .onChange(of: isTargeted) { _, targeted in
+        if !showResult {
+          onHoverChange(targeted)
         }
-        return isHovered ? Color.blue.opacity(0.1) : Color.white
-    }
+      }
+  }
 
-    private func handleDrop(providers: [NSItemProvider]) -> Bool {
-        guard let provider = providers.first else { return false }
+  private func handleDrop(providers: [NSItemProvider]) -> Bool {
+    guard let provider = providers.first else { return false }
 
-        provider.loadObject(ofClass: NSString.self) { (object, error) in
-            if let idString = object as? String,
-               let id = Int(idString),
-               let shape = getShapeById(id) {
-                DispatchQueue.main.async {
-                    onDrop(shape)
-                }
-            }
+    provider.loadObject(ofClass: NSString.self) { (object, error) in
+      if let shapeString = object as? String {
+        // Parse the shape string format "type:id"
+        let components = shapeString.components(separatedBy: ":")
+        if components.count == 2,
+          let id = Int(components[1]),
+          let shape = availableShapes.first(where: { $0.type == components[0] && $0.id == id })
+        {
+          DispatchQueue.main.async {
+            onDrop(shape)
+          }
         }
-        return true
+      }
     }
-
-    private func getShapeById(_ id: Int) -> ShapeItem? {
-        let shapes = [
-            ShapeItem(id: 1, sides: 3, color: .red, name: "Triangle"),
-            ShapeItem(id: 2, sides: 4, color: .blue, name: "Square"),
-            ShapeItem(id: 3, sides: 5, color: .green, name: "Pentagon"),
-            ShapeItem(id: 4, sides: 6, color: .orange, name: "Hexagon"),
-            ShapeItem(id: 5, sides: 7, color: .purple, name: "Heptagon"),
-            ShapeItem(id: 6, sides: 8, color: .pink, name: "Octagon"),
-            ShapeItem(id: 7, sides: 9, color: .yellow, name: "Nonagon"),
-            ShapeItem(id: 8, sides: 10, color: .cyan, name: "Decagon")
-        ]
-        return shapes.first { $0.id == id }
-    }
+    return true
+  }
 }
 
 struct TestDraggableShapeView: View {
-    let shape: ShapeItem
-    let isAlreadyInPattern: Bool
-    let isSelected: Bool
-    let isSelectionMode: Bool
-    let onDragStart: () -> Void
-    let onDragEnd: () -> Void
-    let onTap: () -> Void
+  let shape: ShapeItem
+  let isAlreadySelected: Bool
+  let isSelected: Bool
+  let isDragging: Bool
+  let onDragStart: () -> Void
+  let onDragEnd: () -> Void
+  let onTap: () -> Void
 
-    var body: some View {
-        VStack(spacing: 5) {
-            ZStack {
-                PolygonShape(sides: shape.sides)
-                    .fill(shape.color)
-                    .frame(width: 60, height: 60)
-
-                Text("\(shape.id)")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
-            }
-
-            Text(shape.name)
-                .font(.caption)
-                .foregroundColor(.primary)
-        }
-        .scaleEffect(0.9)
-        .opacity(isAlreadyInPattern ? 0.5 : 1.0)
-        .overlay(
-            // Selection indicator
-            isSelected ?
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.blue, lineWidth: 3)
-                .background(Color.blue.opacity(0.2))
-            :
-            // Visual indicator if already used
-            isAlreadyInPattern ?
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.gray, lineWidth: 2)
-                .background(Color.gray.opacity(0.3))
-            : nil
-        )
-        .onTapGesture {
-            onTap()
-        }
-        .onDrag {
-            onDragStart()
-            return NSItemProvider(object: "\(shape.id)" as NSString)
-        }
-        .onDragEnd {
-            onDragEnd()
-        }
+  var body: some View {
+    VStack(spacing: 5) {
+      Image(shape.imageName)
+        .resizable()
+        .aspectRatio(contentMode: .fit)
+        .frame(width: 60, height: 60)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
+    .scaleEffect(isDragging ? 0.8 : 0.9)
+    .opacity(isAlreadySelected ? 0.3 : (isDragging ? 0.7 : 1.0))
+    .overlay(
+      // Selection indicator - only show when selected and not already selected
+      isSelected && !isAlreadySelected
+        ? RoundedRectangle(cornerRadius: 8)
+          .stroke(Color.blue, lineWidth: 3)
+          .background(Color.blue.opacity(0.2))
+        : nil
+    )
+    .animation(.easeInOut(duration: 0.2), value: isDragging)
+    .animation(.easeInOut(duration: 0.2), value: isSelected)
+    .onTapGesture {
+      if !isAlreadySelected {
+        onTap()
+      }
+    }
+    .draggable("\(shape.type):\(shape.id)") {
+      // Drag preview
+      TestDragPreview(shape: shape)
+        .onAppear { onDragStart() }
+        .onDisappear { onDragEnd() }
+    }
+  }
 }
 
-struct TestResultsView: View {
-    let results: TestResults
+struct TestDragPreview: View {
+  let shape: ShapeItem
 
-    var body: some View {
-        VStack(spacing: 15) {
-            Text("Test Results")
-                .font(.title2)
-                .fontWeight(.bold)
-
-            VStack(spacing: 10) {
-                HStack {
-                    Text("Overall Score:")
-                        .fontWeight(.semibold)
-                    Spacer()
-                    Text("\(Int(results.overallScore * 100))%")
-                        .fontWeight(.bold)
-                        .foregroundColor(scoreColor(results.overallScore))
-                }
-
-                HStack {
-                    Text("Position Accuracy:")
-                    Spacer()
-                    Text("\(results.correctPositions)/\(results.totalShapes)")
-                        .foregroundColor(.blue)
-                }
-
-                HStack {
-                    Text("Shape Recognition:")
-                    Spacer()
-                    Text("\(results.correctShapes)/\(results.totalShapes)")
-                        .foregroundColor(.green)
-                }
-            }
-
-            // Performance indicator
-            Text(performanceText(results.overallScore))
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .foregroundColor(scoreColor(results.overallScore))
-        }
-        .padding()
-        .background(Color.gray.opacity(0.1))
-        .cornerRadius(12)
-        .padding(.horizontal, 40)
+  var body: some View {
+    VStack(spacing: 5) {
+      Image(shape.imageName)
+        .resizable()
+        .aspectRatio(contentMode: .fit)
+        .frame(width: 50, height: 50)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
     }
-
-    private func scoreColor(_ score: Double) -> Color {
-        if score >= 0.9 { return .green }
-        else if score >= 0.7 { return .blue }
-        else if score >= 0.5 { return .orange }
-        else { return .red }
-    }
-
-    private func performanceText(_ score: Double) -> String {
-        if score >= 0.9 { return "Excellent!" }
-        else if score >= 0.7 { return "Good Job!" }
-        else if score >= 0.5 { return "Keep Practicing!" }
-        else { return "Try Again!" }
-    }
+    .padding(8)
+    .background(Color.white.opacity(0.9))
+    .cornerRadius(8)
+    .shadow(radius: 5)
+  }
 }
-
-// MARK: - Data Models
-
-struct TestResults {
-    let totalShapes: Int
-    let correctPositions: Int
-    let correctShapes: Int
-    let positionAccuracy: Double
-    let shapeAccuracy: Double
-    let overallScore: Double
-    let positionErrors: [Int]
-    let shapeErrors: [Int]
-    let userPattern: [Int]
-    let targetPattern: [Int]
-}
-*/

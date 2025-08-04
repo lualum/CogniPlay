@@ -209,10 +209,10 @@ struct TaskRow: View {
       currentView = .whackAMole
     case "simon":
       currentView = .simon
-    case "speechSpeed", "speechImage":
+    case "speech":
       currentView = .speech
-    //case "test":
-    //currentView = .testPattern
+    case "test":
+      currentView = .testPattern
     case "heartbeat", "previous":
       // Handle optional tasks
       sessionManager.completeTask(taskId)

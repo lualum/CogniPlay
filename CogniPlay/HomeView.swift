@@ -112,7 +112,7 @@ struct HomeView: View {
 
         // Info Button
         Button(action: {
-          print("Info tapped")  // Debug action
+          currentView = .about
         }) {
           HStack {
             Image(systemName: "info.circle.fill")

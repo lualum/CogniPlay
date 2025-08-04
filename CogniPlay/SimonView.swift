@@ -149,8 +149,7 @@ struct SimonView: View {
       // No action during active gameplay
       break
     case .gameOver:
-      simonScore = score
-      sessionManager.completeTask("simon")
+      sessionManager.completeTask("simon", withScore: SimonMemoryScore(score: score))
       currentView = .sessionChecklist
     }
   }
@@ -217,8 +216,6 @@ struct SimonView: View {
   func playerTapped(_ index: Int) {
     guard !isProcessingInput else { return }
 
-    print("Player tapped: \(index), expected: \(sequence[currentStep])")
-
     isProcessingInput = true
     activeButton = index
 
@@ -227,7 +224,6 @@ struct SimonView: View {
 
       // Check if the tapped button matches the expected sequence step
       if index != sequence[currentStep] {
-        print("Game over! Tapped \(index), expected \(sequence[currentStep])")
         gameState = .gameOver
         isProcessingInput = false
 
