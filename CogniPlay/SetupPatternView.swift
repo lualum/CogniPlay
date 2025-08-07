@@ -174,7 +174,7 @@ struct SetupPatternView: View {
     .background(Color.white)
     .onAppear {
       setupShapes()
-      loadCurrentPattern()
+      clearPattern()  // Changed from loadCurrentPattern() to clearPattern()
     }
     .onTapGesture {
       selectedShape = nil
