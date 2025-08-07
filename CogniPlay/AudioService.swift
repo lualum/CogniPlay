@@ -1,389 +1,343 @@
-import AVFoundation
-import Foundation
+// import AVFoundation
+// import Foundation
+// import Speech
 
-// MARK: - API Models for Alzheimer Detection API
-struct TrialData: Codable {
-  let utterance: String
-  let duration: Double?
+// // MARK: - API Models for Alzheimer Detection API
+// struct TrialData: Codable {
+//   let utterance: String
+//   let duration: Double?
 
-  init(utterance: String, duration: Double? = nil) {
-    self.utterance = utterance
-    self.duration = duration
-  }
-}
+//   init(utterance: String, duration: Double? = nil) {
+//     self.utterance = utterance
+//     self.duration = duration
+//   }
+// }
 
-struct AlzheimerPredictionRequest: Codable {
-  let trialData: [TrialData]
+// struct AlzheimerPredictionRequest: Codable {
+//   let trial_data: [TrialData]
+// }
 
-  enum CodingKeys: String, CodingKey {
-    case trialData = "trial_data"
-  }
-}
+// struct AlzheimerPredictionResponse: Codable {
+//   let probability: Double
+//   let prediction: Int
+//   let confidence: String
+// }
 
-struct AlzheimerPredictionResponse: Codable {
-  let probability: Double
-  let prediction: Int
-  let confidence: String
-}
+// struct APIError: Codable {
+//   let error: String
+//   let message: String?
+// }
 
-struct APIError: Codable {
-  let error: String
-  let message: String?
-}
+// // MARK: - Error Types
+// enum TranscriptionError: Error, LocalizedError {
+//   case invalidAPIKey
+//   case invalidAudioFile
+//   case invalidResponse
+//   case invalidRequest
+//   case apiError(String)
+//   case networkError(String)
 
-// MARK: - Error Types
-enum AlzheimerDetectionError: Error, LocalizedError {
-  case invalidRequest
-  case invalidResponse
-  case apiError(String)
-  case networkError(String)
+//   var errorDescription: String? {
+//     switch self {
+//     case .invalidAPIKey:
+//       return "Invalid or missing API key"
+//     case .invalidAudioFile:
+//       return "Could not read audio file"
+//     case .invalidResponse:
+//       return "Invalid response from API"
+//     case .invalidRequest:
+//       return "Could not create request"
+//     case .apiError(let message):
+//       return "API Error: \(message)"
+//     case .networkError(let message):
+//       return "Network Error: \(message)"
+//     }
+//   }
+// }
 
-  var errorDescription: String? {
-    switch self {
-    case .invalidRequest:
-      return "Could not create request"
-    case .invalidResponse:
-      return "Invalid response from API"
-    case .apiError(let message):
-      return "API Error: \(message)"
-    case .networkError(let message):
-      return "Network Error: \(message)"
-    }
-  }
-}
+// // MARK: - Audio Recorder Class
+// class AudioRecorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
+//   @Published var isRecording = false
+//   @Published var hasRecording = false
 
-// MARK: - Audio Recorder Class
-class AudioRecorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
-  @Published var isRecording = false
-  @Published var hasRecording = false
+//   private var audioRecorder: AVAudioRecorder?
+//   var audioURL: URL?
 
-  private var audioRecorder: AVAudioRecorder?
-  var audioURL: URL?
+//   override init() {
+//     super.init()
+//     setupAudioSession()
+//   }
 
-  override init() {
-    super.init()
-    setupAudioSession()
-  }
+//   private func setupAudioSession() {
+//     do {
+//       let session = AVAudioSession.sharedInstance()
 
-  private func setupAudioSession() {
-    do {
-      let session = AVAudioSession.sharedInstance()
-      try session.setCategory(.playAndRecord, mode: .default)
-      try session.setActive(true)
-    } catch {
-      print("Failed to setup audio session: \(error.localizedDescription)")
-    }
-  }
+//       // Check if recording is available
+//       guard session.isInputAvailable else {
+//         print("Audio input not available")
+//         return
+//       }
 
-  func requestPermission() {
-    if #available(iOS 17.0, *) {
-      AVAudioApplication.requestRecordPermission { granted in
-        DispatchQueue.main.async {
-          if !granted {
-            print("Audio recording permission denied")
-          }
-        }
-      }
-    } else {
-      // Fallback for iOS 16 and earlier
-      AVAudioSession.sharedInstance().requestRecordPermission { granted in
-        DispatchQueue.main.async {
-          if !granted {
-            print("Audio recording permission denied")
-          }
-        }
-      }
-    }
-  }
+//       try session.setCategory(
+//         .playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
+//       try session.setActive(true, options: .notifyOthersOnDeactivation)
 
-  func startRecording() {
-    let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-    let audioFilename = documentsPath.appendingPathComponent("recording.wav")
+//       print("Audio session setup successful")
+//     } catch {
+//       print("Failed to setup audio session: \(error.localizedDescription)")
+//     }
+//   }
 
-    let settings =
-      [
-        AVFormatIDKey: Int(kAudioFormatLinearPCM),
-        AVSampleRateKey: 16000,
-        AVNumberOfChannelsKey: 1,
-        AVLinearPCMBitDepthKey: 16,
-        AVLinearPCMIsBigEndianKey: false,
-        AVLinearPCMIsFloatKey: false,
-        AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue,
-      ] as [String: Any]
+//   // Also add this method to check permissions before recording
+//   func checkPermissions() -> Bool {
+//     let audioStatus = AVAudioSession.sharedInstance().recordPermission
+//     let speechStatus = SFSpeechRecognizer.authorizationStatus()
 
-    do {
-      audioRecorder = try AVAudioRecorder(url: audioFilename, settings: settings)
-      audioRecorder?.delegate = self
-      audioRecorder?.record()
+//     return audioStatus == .granted && speechStatus == .authorized
+//   }
 
-      self.audioURL = audioFilename
-      self.isRecording = true
-      self.hasRecording = false
-    } catch {
-      print("Could not start recording: \(error.localizedDescription)")
-    }
-  }
+//   func requestPermission() {
+//     // Always use AVAudioSession for recording permission
+//     AVAudioSession.sharedInstance().requestRecordPermission { granted in
+//       DispatchQueue.main.async {
+//         if !granted {
+//           print("Audio recording permission denied")
+//         }
+//       }
+//     }
 
-  func stopRecording() {
-    audioRecorder?.stop()
-    isRecording = false
-    hasRecording = audioURL != nil
-  }
+//     // Request speech recognition permission
+//     SFSpeechRecognizer.requestAuthorization { authStatus in
+//       DispatchQueue.main.async {
+//         if authStatus != .authorized {
+//           print("Speech recognition permission denied")
+//         }
+//       }
+//     }
+//   }
 
-  func deleteCurrentRecording() {
-    guard let url = audioURL else { return }
+//   func startRecording() {
+//     let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+//     let audioFilename = documentsPath.appendingPathComponent("recording.wav")
 
-    do {
-      if FileManager.default.fileExists(atPath: url.path) {
-        try FileManager.default.removeItem(at: url)
-        print("Audio file deleted successfully: \(url.path)")
-      }
-    } catch {
-      print("Failed to delete audio file: \(error.localizedDescription)")
-    }
+//     let settings =
+//       [
+//         AVFormatIDKey: Int(kAudioFormatLinearPCM),
+//         AVSampleRateKey: 16000,
+//         AVNumberOfChannelsKey: 1,
+//         AVLinearPCMBitDepthKey: 16,
+//         AVLinearPCMIsBigEndianKey: false,
+//         AVLinearPCMIsFloatKey: false,
+//         AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue,
+//       ] as [String: Any]
 
-    audioURL = nil
-    hasRecording = false
-  }
+//     do {
+//       audioRecorder = try AVAudioRecorder(url: audioFilename, settings: settings)
+//       audioRecorder?.delegate = self
+//       audioRecorder?.record()
 
-  // MARK: - AVAudioRecorderDelegate
-  func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
-    if flag {
-      hasRecording = true
-    }
-  }
+//       self.audioURL = audioFilename
+//       self.isRecording = true
+//       self.hasRecording = false
+//     } catch {
+//       print("Could not start recording: \(error.localizedDescription)")
+//     }
+//   }
 
-  // MARK: - Helper Functions
-  func getAudioFileInfo() -> String? {
-    guard let url = audioURL else { return nil }
+//   func stopRecording() {
+//     audioRecorder?.stop()
+//     isRecording = false
+//     hasRecording = audioURL != nil
+//   }
 
-    do {
-      guard FileManager.default.fileExists(atPath: url.path) else {
-        return "Audio file does not exist"
-      }
+//   func deleteCurrentRecording() {
+//     guard let url = audioURL else { return }
 
-      let audioFile = try AVAudioFile(forReading: url)
-      let duration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
-      let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
-      let fileSize = attributes[.size] as? Int64 ?? 0
+//     do {
+//       if FileManager.default.fileExists(atPath: url.path) {
+//         try FileManager.default.removeItem(at: url)
+//         print("Audio file deleted successfully: \(url.path)")
+//       }
+//     } catch {
+//       print("Failed to delete audio file: \(error.localizedDescription)")
+//     }
 
-      return """
-        Audio File Info:
-        - Duration: \(String(format: "%.2f", duration)) seconds
-        - File Size: \(fileSize) bytes
-        - Sample Rate: \(audioFile.fileFormat.sampleRate) Hz
-        - Channels: \(audioFile.fileFormat.channelCount)
-        """
-    } catch {
-      return "Error reading audio file: \(error.localizedDescription)"
-    }
-  }
-}
+//     audioURL = nil
+//     hasRecording = false
+//   }
 
-// MARK: - Alzheimer Detection Service
-class AlzheimerDetectionService: ObservableObject {
-  private let baseURL = "https://cogniplayapp-alzheimer-detection-api.hf.space"
-  private let session: URLSession
+//   // MARK: - AVAudioRecorderDelegate
+//   func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
+//     if flag {
+//       hasRecording = true
+//     }
+//   }
 
-  init() {
-    let config = URLSessionConfiguration.default
-    config.timeoutIntervalForRequest = 60.0
-    config.timeoutIntervalForResource = 120.0
-    self.session = URLSession(configuration: config)
-  }
+//   // MARK: - Helper Functions
+//   func getAudioFileInfo() -> String? {
+//     guard let url = audioURL else { return nil }
 
-  // MARK: - API Validation
-  func validateAPIConnection() async throws -> Bool {
-    guard let url = URL(string: baseURL + "/predict") else {
-      throw AlzheimerDetectionError.invalidRequest
-    }
+//     do {
+//       guard FileManager.default.fileExists(atPath: url.path) else {
+//         return "Audio file does not exist"
+//       }
 
-    let testRequest = AlzheimerPredictionRequest(
-      trialData: [TrialData(utterance: "Hello world", duration: 1.0)]
-    )
+//       let audioFile = try AVAudioFile(forReading: url)
+//       let duration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
+//       let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+//       let fileSize = attributes[.size] as? Int64 ?? 0
 
-    var urlRequest = URLRequest(url: url)
-    urlRequest.httpMethod = "POST"
-    urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    urlRequest.timeoutInterval = 10.0
+//       return """
+//         Audio File Info:
+//         - Duration: \(String(format: "%.2f", duration)) seconds
+//         - File Size: \(fileSize) bytes
+//         - Sample Rate: \(audioFile.fileFormat.sampleRate) Hz
+//         - Channels: \(audioFile.fileFormat.channelCount)
+//         """
+//     } catch {
+//       return "Error reading audio file: \(error.localizedDescription)"
+//     }
+//   }
+// }
 
-    do {
-      urlRequest.httpBody = try JSONEncoder().encode(testRequest)
-      let (_, response) = try await session.data(for: urlRequest)
+// // MARK: - Alzheimer Detection Service
+// class AlzheimerDetectionService: ObservableObject {
+//   private let baseURL = "https://cogniplayapp-alzheimer-detection-api.hf.space"
 
-      if let httpResponse = response as? HTTPURLResponse {
-        return httpResponse.statusCode == 200 || httpResponse.statusCode == 400
-          || httpResponse.statusCode == 422
-      }
-      return false
-    } catch {
-      print("API validation error: \(error)")
-      return false
-    }
-  }
+//   // MARK: - Main Analysis Functions (Simplified)
+//   func analyzeUtterances(_ utterances: [TrialData]) async throws -> AlzheimerPredictionResponse {
+//     guard let url = URL(string: baseURL + "/predict") else {
+//       throw TranscriptionError.invalidRequest
+//     }
 
-  // MARK: - Main Analysis Function (for text input)
-  func analyzeUtteranceForAlzheimers(utterance: String, duration: Double? = nil) async throws
-    -> AlzheimerPredictionResponse
-  {
-    guard let url = URL(string: baseURL + "/predict") else {
-      throw AlzheimerDetectionError.invalidRequest
-    }
+//     let requestData = AlzheimerPredictionRequest(trial_data: utterances)
 
-    let request = AlzheimerPredictionRequest(
-      trialData: [TrialData(utterance: utterance, duration: duration)]
-    )
+//     var request = URLRequest(url: url)
+//     request.httpMethod = "POST"
+//     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+//     request.timeoutInterval = 60.0
 
-    var urlRequest = URLRequest(url: url)
-    urlRequest.httpMethod = "POST"
-    urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+//     do {
+//       let jsonData = try JSONEncoder().encode(requestData)
+//       request.httpBody = jsonData
+//     } catch {
+//       throw TranscriptionError.invalidRequest
+//     }
 
-    do {
-      urlRequest.httpBody = try JSONEncoder().encode(request)
-    } catch {
-      throw AlzheimerDetectionError.invalidRequest
-    }
+//     do {
+//       let (data, response) = try await URLSession.shared.data(for: request)
 
-    do {
-      let (data, response) = try await session.data(for: urlRequest)
+//       guard let httpResponse = response as? HTTPURLResponse else {
+//         throw TranscriptionError.invalidResponse
+//       }
 
-      guard let httpResponse = response as? HTTPURLResponse else {
-        throw AlzheimerDetectionError.invalidResponse
-      }
+//       guard 200...299 ~= httpResponse.statusCode else {
+//         throw TranscriptionError.apiError("HTTP Error: \(httpResponse.statusCode)")
+//       }
 
-      print("Alzheimer API Response Status: \(httpResponse.statusCode)")
+//       let predictionResponse = try JSONDecoder().decode(
+//         AlzheimerPredictionResponse.self, from: data)
+//       return predictionResponse
 
-      if let responseString = String(data: data, encoding: .utf8) {
-        print("Alzheimer API Response: \(responseString)")
-      }
+//     } catch {
+//       if error is TranscriptionError {
+//         throw error
+//       } else {
+//         throw TranscriptionError.networkError(error.localizedDescription)
+//       }
+//     }
+//   }
 
-      guard 200...299 ~= httpResponse.statusCode else {
-        if let errorResponse = try? JSONDecoder().decode(APIError.self, from: data) {
-          throw AlzheimerDetectionError.apiError(
-            errorResponse.error
-              + (errorResponse.message != nil ? ": \(errorResponse.message!)" : ""))
-        } else {
-          throw AlzheimerDetectionError.apiError(
-            "API returned status code: \(httpResponse.statusCode)")
-        }
-      }
+//   // MARK: - Convenience Methods
+//   func analyzeSingleUtterance(_ utterance: String, duration: Double? = nil) async throws
+//     -> AlzheimerPredictionResponse
+//   {
+//     let trialData = [TrialData(utterance: utterance, duration: duration)]
+//     return try await analyzeUtterances(trialData)
+//   }
 
-      do {
-        let predictionResponse = try JSONDecoder().decode(
-          AlzheimerPredictionResponse.self, from: data)
-        return predictionResponse
-      } catch {
-        print("JSON Decoding Error: \(error)")
-        throw AlzheimerDetectionError.invalidResponse
-      }
+//   func analyzeAudioForAlzheimers(audioURL: URL, recordingDuration: Double) async throws
+//     -> AlzheimerPredictionResponse
+//   {
+//     // First, transcribe the audio
+//     let transcription = try await transcribeAudio(audioURL: audioURL)
 
-    } catch {
-      if error is AlzheimerDetectionError {
-        throw error
-      } else {
-        throw AlzheimerDetectionError.networkError(error.localizedDescription)
-      }
-    }
-  }
+//     // Then analyze the transcription for Alzheimer's
+//     return try await analyzeSingleUtterance(transcription, duration: recordingDuration)
+//   }
 
-  // MARK: - Multiple Utterances Analysis
-  func analyzeMultipleUtterances(_ utterances: [TrialData]) async throws
-    -> AlzheimerPredictionResponse
-  {
-    guard let url = URL(string: baseURL + "/predict") else {
-      throw AlzheimerDetectionError.invalidRequest
-    }
+//   // MARK: - API Validation
+//   func validateAPIConnection() async throws -> Bool {
+//     let testData = [TrialData(utterance: "Hello world", duration: 1.0)]
 
-    let request = AlzheimerPredictionRequest(trialData: utterances)
+//     do {
+//       _ = try await analyzeUtterances(testData)
+//       return true
+//     } catch {
+//       print("API validation error: \(error)")
+//       return false
+//     }
+//   }
 
-    var urlRequest = URLRequest(url: url)
-    urlRequest.httpMethod = "POST"
-    urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+//   // MARK: - Audio Transcription using iOS Speech Recognition
+//   func transcribeAudio(audioURL: URL) async throws -> String {
+//     return try await withCheckedThrowingContinuation { continuation in
+//       // Check speech recognition authorization
+//       SFSpeechRecognizer.requestAuthorization { authStatus in
+//         guard authStatus == .authorized else {
+//           continuation.resume(
+//             throwing: TranscriptionError.apiError("Speech recognition not authorized"))
+//           return
+//         }
 
-    do {
-      urlRequest.httpBody = try JSONEncoder().encode(request)
-    } catch {
-      throw AlzheimerDetectionError.invalidRequest
-    }
+//         // Create speech recognizer
+//         guard let speechRecognizer = SFSpeechRecognizer() else {
+//           continuation.resume(
+//             throwing: TranscriptionError.apiError("Speech recognizer not available"))
+//           return
+//         }
 
-    do {
-      let (data, response) = try await session.data(for: urlRequest)
+//         guard speechRecognizer.isAvailable else {
+//           continuation.resume(
+//             throwing: TranscriptionError.apiError("Speech recognizer not available"))
+//           return
+//         }
 
-      guard let httpResponse = response as? HTTPURLResponse else {
-        throw AlzheimerDetectionError.invalidResponse
-      }
+//         // Create recognition request
+//         let request = SFSpeechURLRecognitionRequest(url: audioURL)
+//         request.shouldReportPartialResults = false
 
-      print("Alzheimer API Response Status: \(httpResponse.statusCode)")
+//         // Perform recognition
+//         speechRecognizer.recognitionTask(with: request) { result, error in
+//           if let error = error {
+//             continuation.resume(
+//               throwing: TranscriptionError.networkError(error.localizedDescription))
+//             return
+//           }
 
-      if let responseString = String(data: data, encoding: .utf8) {
-        print("Alzheimer API Response: \(responseString)")
-      }
+//           guard let result = result, result.isFinal else {
+//             return
+//           }
 
-      guard 200...299 ~= httpResponse.statusCode else {
-        if let errorResponse = try? JSONDecoder().decode(APIError.self, from: data) {
-          throw AlzheimerDetectionError.apiError(
-            errorResponse.error
-              + (errorResponse.message != nil ? ": \(errorResponse.message!)" : ""))
-        } else {
-          throw AlzheimerDetectionError.apiError(
-            "API returned status code: \(httpResponse.statusCode)")
-        }
-      }
+//           let transcription = result.bestTranscription.formattedString.trimmingCharacters(
+//             in: .whitespacesAndNewlines)
+//           continuation.resume(returning: transcription)
+//         }
+//       }
+//     }
+//   }
 
-      do {
-        let predictionResponse = try JSONDecoder().decode(
-          AlzheimerPredictionResponse.self, from: data)
-        return predictionResponse
-      } catch {
-        print("JSON Decoding Error: \(error)")
-        throw AlzheimerDetectionError.invalidResponse
-      }
+//   // MARK: - Speech Recognition Permission
+//   func requestSpeechRecognitionPermission() async -> Bool {
+//     return await withCheckedContinuation { continuation in
+//       SFSpeechRecognizer.requestAuthorization { authStatus in
+//         continuation.resume(returning: authStatus == .authorized)
+//       }
+//     }
+//   }
+// }
 
-    } catch {
-      if error is AlzheimerDetectionError {
-        throw error
-      } else {
-        throw AlzheimerDetectionError.networkError(error.localizedDescription)
-      }
-    }
-  }
-}
-
-// MARK: - Usage Examples
-func exampleUsage() async {
-  let service = AlzheimerDetectionService()
-
-  // Example 1: Single utterance
-  do {
-    let response = try await service.analyzeUtteranceForAlzheimers(
-      utterance: "Hello, how are you today?",
-      duration: 2.5
-    )
-    print("Probability: \(response.probability)")
-    print(
-      "Prediction: \(response.prediction == 1 ? "Alzheimer's detected" : "No Alzheimer's detected")"
-    )
-    print("Confidence: \(response.confidence)")
-  } catch {
-    print("Error: \(error.localizedDescription)")
-  }
-
-  // Example 2: Multiple utterances
-  let utterances = [
-    TrialData(utterance: "Hello, how are you today?", duration: 2.5),
-    TrialData(utterance: "I'm feeling quite well", duration: 1.8),
-    TrialData(utterance: "The weather is nice outside", duration: 2.1),
-  ]
-
-  do {
-    let response = try await service.analyzeMultipleUtterances(utterances)
-    print("Multiple utterances analysis:")
-    print("Probability: \(response.probability)")
-    print(
-      "Prediction: \(response.prediction == 1 ? "Alzheimer's detected" : "No Alzheimer's detected")"
-    )
-    print("Confidence: \(response.confidence)")
-  } catch {
-    print("Error: \(error.localizedDescription)")
-  }
-}
+// // MARK: - Helper function to create utterances easily
+// func createTrialData(_ text: String, duration: Double? = nil) -> TrialData {
+//   return TrialData(utterance: text, duration: duration)
+// }

@@ -1,10 +1,14 @@
+import AVFoundation
+import Speech
 import SwiftUI
 
 struct SpeechView: View {
   @Binding var currentView: ContentView.AppView
-  @Binding var speechScore: Double
+  @State private var speechScore: Double = 0.0
+
   @StateObject private var audioRecorder = AudioRecorder()
-  @StateObject private var alzheimerService = AlzheimerDetectionService()
+  @StateObject private var speechRecognizer = SpeechRecognizer()
+  @StateObject private var alzheimerAPI = AlzheimerAPI()
   @ObservedObject private var sessionManager = SessionManager.shared
 
   // Recording state
@@ -14,13 +18,14 @@ struct SpeechView: View {
 
   // Results state
   @State private var transcription = ""
-  @State private var predictionResult: AlzheimerPredictionResponse?
+  @State private var utterances: [Utterance] = []
+  @State private var predictionResult: APIResponse?
 
   // UI state
   @State private var isProcessing = false
   @State private var errorMessage = ""
   @State private var showError = false
-  @State private var apiKeyValid = false
+  @State private var apiKeyValid = true  // Assuming API is available
 
   var body: some View {
     VStack(spacing: 0) {
@@ -29,8 +34,18 @@ struct SpeechView: View {
       // MARK: - Header
       headerSection
 
-      // MARK: - Results Display
-      resultsScrollView
+      // MARK: - Conditional Content: Cookie Image OR Results
+      if hasResults {
+        // Show results when available
+        resultsScrollView
+          .frame(maxHeight: .infinity)  // Take up more space
+      } else {
+        // Show cookie image when no results
+        Image("Cookie")
+          .resizable()
+          .aspectRatio(contentMode: .fit)
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+      }
 
       Spacer()
 
@@ -48,50 +63,16 @@ struct SpeechView: View {
     }
   }
 
-  // MARK: - View Components
-  private var headerSection: some View {
-    VStack(spacing: 5) {
-      Text("Speech Analysis")
-        .font(.largeTitle)
-        .fontWeight(.bold)
-
-      Text("Audio Transcription & Analysis")
-        .font(.title2)
-        .fontWeight(.medium)
-        .foregroundColor(.primary)
-    }
-    .padding(.bottom, 30)
+  // MARK: - Computed Properties
+  private var hasResults: Bool {
+    // Removed showError from here - only show results if we have actual content
+    !transcription.isEmpty || predictionResult != nil
   }
 
-  private var imageSection: some View {
-    Rectangle()
-      .fill(Color(.systemBackground))
-      .stroke(Color.primary, lineWidth: 1)
-      .frame(width: 280, height: 200)
-      .overlay(
-        VStack {
-          Image(systemName: "brain.head.profile")
-            .font(.system(size: 40))
-            .foregroundColor(.blue)
-          Text("Voice Analysis")
-            .font(.caption)
-            .foregroundColor(.secondary)
-          Text("(Audio Transcription & Analysis)")
-            .font(.caption2)
-            .foregroundColor(.secondary)
-        }
-      )
-      .padding(.bottom, 20)
-  }
-
+  // Update your resultsScrollView to not show errors:
   private var resultsScrollView: some View {
     ScrollView {
       VStack(spacing: 20) {
-        // Error display
-        if showError {
-          errorDisplayView
-        }
-
         // Transcription display
         if !transcription.isEmpty {
           transcriptionView
@@ -102,25 +83,24 @@ struct SpeechView: View {
           predictionResultView(result: result)
         }
       }
+      .padding(.top, 20)  // Add some top padding when results are displayed
     }
-    .frame(maxHeight: 300)
+    // Remove the frame height restriction to let it expand
   }
 
-  private var errorDisplayView: some View {
-    VStack(alignment: .leading, spacing: 5) {
-      Text("Error:")
-        .font(.headline)
-        .fontWeight(.semibold)
-        .foregroundColor(.red)
+  // MARK: - View Components
+  private var headerSection: some View {
+    VStack(spacing: 15) {
+      Text("Speech Analysis")
+        .font(.largeTitle)
+        .fontWeight(.bold)
 
-      Text(errorMessage)
-        .font(.body)
-        .padding()
-        .background(Color.red.opacity(0.1))
-        .cornerRadius(8)
-        .foregroundColor(.red)
+      Text("Audio Transcription & Analysis")
+        .font(.title2)
+        .fontWeight(.medium)
+        .foregroundColor(.primary)
     }
-    .padding(.horizontal, 20)
+    .padding(.bottom, 30)
   }
 
   private var transcriptionView: some View {
@@ -139,7 +119,7 @@ struct SpeechView: View {
     .padding(.horizontal, 20)
   }
 
-  private func predictionResultView(result: AlzheimerPredictionResponse) -> some View {
+  private func predictionResultView(result: APIResponse) -> some View {
     VStack(alignment: .leading, spacing: 10) {
       Text("Analysis Results:")
         .font(.headline)
@@ -148,28 +128,12 @@ struct SpeechView: View {
 
       VStack(alignment: .leading, spacing: 8) {
         HStack {
-          Text("Probability:")
-            .fontWeight(.medium)
-          Spacer()
-          Text("\(String(format: "%.1f", result.probability * 100))%")
-            .fontWeight(.semibold)
-        }
-
-        HStack {
           Text("Prediction:")
             .fontWeight(.medium)
           Spacer()
-          Text(result.prediction == 1 ? "Positive" : "Negative")
+          Text(result.prediction)
             .fontWeight(.semibold)
-            .foregroundColor(result.prediction == 1 ? .red : .green)
-        }
-
-        HStack {
-          Text("Confidence:")
-            .fontWeight(.medium)
-          Spacer()
-          Text(result.confidence)
-            .fontWeight(.semibold)
+            .foregroundColor(result.prediction.lowercased().contains("positive") ? .red : .green)
         }
 
         HStack {
@@ -179,6 +143,19 @@ struct SpeechView: View {
           Text(String(format: "%.2f", speechScore))
             .fontWeight(.semibold)
             .foregroundColor(.blue)
+        }
+
+        // Display additional info if available
+        if let additionalInfo = result.additionalInfo {
+          ForEach(Array(additionalInfo.keys.sorted()), id: \.self) { key in
+            HStack {
+              Text("\(key.capitalized):")
+                .fontWeight(.medium)
+              Spacer()
+              Text("\(additionalInfo[key] ?? "N/A")")
+                .fontWeight(.semibold)
+            }
+          }
         }
       }
       .padding()
@@ -193,7 +170,7 @@ struct SpeechView: View {
       // Microphone button
       microphoneButton
 
-      // Timer
+      // Timer with minimum duration indication
       timerView
 
       // Processing indicator
@@ -207,8 +184,10 @@ struct SpeechView: View {
       // Submit button
       submitButton
 
-      // Test API button
-      testAPIButton
+      // Done button (appears after analysis)
+      if predictionResult != nil {
+        doneButton
+      }
     }
   }
 
@@ -233,10 +212,26 @@ struct SpeechView: View {
   }
 
   private var timerView: some View {
-    Text(recordingTime)
-      .font(.title2)
-      .fontWeight(.medium)
-      .foregroundColor(audioRecorder.isRecording ? .red : .primary)
+    VStack(spacing: 5) {
+      Text(recordingTime)
+        .font(.title2)
+        .fontWeight(.medium)
+        .foregroundColor(audioRecorder.isRecording ? .red : .primary)
+
+      // Show minimum duration indicator
+      if audioRecorder.isRecording {
+        let remainingTime = max(0, 30 - Int(recordingDuration))
+        if remainingTime > 0 {
+          Text("Minimum: \(remainingTime)s remaining")
+            .font(.caption)
+            .foregroundColor(.orange)
+        } else {
+          Text("Minimum duration reached")
+            .font(.caption)
+            .foregroundColor(.green)
+        }
+      }
+    }
   }
 
   private var processingIndicator: some View {
@@ -263,35 +258,64 @@ struct SpeechView: View {
   private var submitButton: some View {
     Button(action: {
       if audioRecorder.hasRecording && apiKeyValid {
+        // Check if recording meets minimum duration
+        if recordingDuration < 30 && audioRecorder.hasRecording {
+          showError = true
+          errorMessage =
+            "Recording must be at least 30 seconds long. Current duration: \(Int(recordingDuration)) seconds"
+          return
+        }
         processAudio()
       } else if !apiKeyValid {
         sessionManager.completeTask("speech", withScore: SpeechScore(probability: 0.0))
         currentView = .sessionChecklist
       }
     }) {
-      Text(isProcessing ? "Processing..." : buttonTitle)
+      VStack(spacing: 4) {
+        Text(isProcessing ? "Processing..." : buttonTitle)
+          .font(.title2)
+          .fontWeight(.medium)
+          .foregroundColor(.white)
+
+        // Show error message in button if there's an error
+        if showError && !errorMessage.isEmpty {
+          Text(errorMessage)
+            .font(.caption)
+            .foregroundColor(.white.opacity(0.9))
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 8)
+        }
+      }
+      .frame(maxWidth: .infinity)
+      .frame(minHeight: 50)
+      .background(buttonBackgroundColor)
+      .cornerRadius(10)
+      .animation(.easeInOut(duration: 0.3), value: apiKeyValid)
+      .animation(.easeInOut(duration: 0.3), value: showError)
+    }
+    .padding(.horizontal, 30)
+    .disabled(
+      (!audioRecorder.hasRecording && apiKeyValid) || isProcessing
+        || (audioRecorder.hasRecording && recordingDuration < 30 && apiKeyValid))
+  }
+
+  private var doneButton: some View {
+    Button(action: {
+      // Complete the task with the current speech score
+      sessionManager.completeTask("speech", withScore: SpeechScore(probability: speechScore))
+      currentView = .sessionChecklist
+    }) {
+      Text("Done")
         .font(.title2)
         .fontWeight(.medium)
         .foregroundColor(.white)
         .frame(maxWidth: .infinity)
         .frame(height: 50)
-        .background(buttonBackgroundColor)
+        .background(Color.green)
         .cornerRadius(10)
-        .animation(.easeInOut(duration: 0.3), value: apiKeyValid)
     }
     .padding(.horizontal, 30)
-    .disabled((!audioRecorder.hasRecording && apiKeyValid) || isProcessing)
-  }
-
-  private var testAPIButton: some View {
-    Button(action: {
-      testAPIConnection()
-    }) {
-      Text("Test API Connection")
-        .font(.body)
-        .foregroundColor(.blue)
-    }
-    .disabled(isProcessing)
+    .padding(.top, 10)
   }
 
   // MARK: - Computed Properties
@@ -299,12 +323,21 @@ struct SpeechView: View {
     if !apiKeyValid {
       return "Skip Task"
     }
+    if audioRecorder.hasRecording && recordingDuration < 30 {
+      return "Recording too short (\(Int(recordingDuration))s/30s)"
+    }
     return "Analyze Audio"
   }
 
   private var buttonBackgroundColor: Color {
+    if showError {
+      return Color.red  // Red background when there's an error
+    }
     if !apiKeyValid {
       return Color.green
+    }
+    if audioRecorder.hasRecording && recordingDuration < 30 {
+      return Color.orange.opacity(0.7)
     }
     return audioRecorder.hasRecording && !isProcessing ? Color.blue : Color.gray.opacity(0.7)
   }
@@ -314,7 +347,27 @@ struct SpeechView: View {
 extension SpeechView {
   private func requestPermissionsAndSetup() {
     audioRecorder.requestPermission()
-    testAPIConnection()
+    requestSpeechPermission()
+  }
+
+  private func requestSpeechPermission() {
+    AVAudioSession.sharedInstance().requestRecordPermission { granted in
+      if !granted {
+        DispatchQueue.main.async {
+          self.errorMessage = "Microphone permission denied"
+          self.showError = true
+        }
+      }
+    }
+
+    SFSpeechRecognizer.requestAuthorization { status in
+      if status != .authorized {
+        DispatchQueue.main.async {
+          self.errorMessage = "Speech recognition permission denied"
+          self.showError = true
+        }
+      }
+    }
   }
 
   private func cleanup() {
@@ -327,10 +380,11 @@ extension SpeechView {
 // MARK: - Recording Functions
 extension SpeechView {
   private func startRecording() {
-    // Reset states
+    // Reset states - Clear error when starting new recording
     recordingDuration = 0
     updateTimer()
     transcription = ""
+    utterances = []
     predictionResult = nil
     errorMessage = ""
     showError = false
@@ -349,6 +403,13 @@ extension SpeechView {
     timer?.invalidate()
     timer = nil
     audioRecorder.stopRecording()
+
+    // Check minimum duration after stopping
+    if recordingDuration < 30 {
+      showError = true
+      errorMessage =
+        ""
+    }
   }
 
   private func updateTimer() {
@@ -358,119 +419,321 @@ extension SpeechView {
   }
 }
 
-// MARK: - API Functions
+// MARK: - Audio Processing Functions
 extension SpeechView {
-  private func testAPIConnection() {
-    Task {
-      do {
-        let isValid = try await alzheimerService.validateAPIConnection()
-        await MainActor.run {
-          self.apiKeyValid = isValid
-          if !isValid {
-            self.showError = true
-            self.errorMessage = "API connection failed. Please check your Cloudflare Worker URL."
-          }
-        }
-      } catch {
-        await MainActor.run {
-          self.apiKeyValid = false
-          self.showError = true
-          self.errorMessage = "Failed to connect to API: \(error.localizedDescription)"
-        }
-      }
-    }
-  }
-
   private func processAudio() {
-    guard let audioURL = audioRecorder.audioURL else {
+    guard let audioURL = audioRecorder.audioFileURL else {
       showError = true
       errorMessage = "No audio file found"
       return
     }
 
-    print("Processing audio file: \(audioURL.path)")
-    if let audioInfo = audioRecorder.getAudioFileInfo() {
-      print(audioInfo)
+    // Double-check minimum duration before processing
+    guard recordingDuration >= 30 else {
+      showError = true
+      errorMessage = "Recording must be at least 30 seconds long"
+      return
     }
 
     isProcessing = true
-    showError = false
+    showError = false  // Clear any previous errors when starting processing
     errorMessage = ""
 
-    // Use the full analysis instead of transcription only
-    processFullAnalysis(audioURL: audioURL)
-  }
-
-  private func processFullAnalysis(audioURL: URL) {
-    Task {
-      do {
-        // Use the analyzeAudioForAlzheimers method which does both transcription and analysis
-        let result = try await alzheimerService.analyzeAudioForAlzheimers(
-          audioURL: audioURL,
-          recordingDuration: recordingDuration
-        )
-
-        // Also get the transcription separately for display
-        let transcriptionText = try await alzheimerService.transcribeAudio(audioURL: audioURL)
-
-        await MainActor.run {
-          print("ANALYSIS RESULT: \(result)")
-          print("TRANSCRIPTION: \(transcriptionText)")
-
-          // Set the speechScore to the probability from the API response
-          self.speechScore = result.probability
-
-          // Update UI with results
-          self.transcription = transcriptionText
-          self.predictionResult = result
-          self.isProcessing = false
-          self.showError = false
-
-          // Clean up the audio file after processing
-          self.audioRecorder.deleteCurrentRecording()
-        }
-      } catch {
-        await MainActor.run {
-          print("ANALYSIS ERROR: \(error.localizedDescription)")
-          self.isProcessing = false
-          self.showError = true
-          self.errorMessage = "Analysis failed: \(error.localizedDescription)"
-
-          // Set speechScore to 0 on error
-          self.speechScore = 0.0
-
-          // Clean up the audio file even on error
-          self.audioRecorder.deleteCurrentRecording()
-        }
-      }
-    }
-  }
-
-  private func processTranscriptionOnly(audioURL: URL) {
-    Task {
-      do {
-        let transcriptionText = try await alzheimerService.transcribeAudio(audioURL: audioURL)
-
-        await MainActor.run {
-          print("TRANSCRIPTION RESULT: \(transcriptionText)")
-          self.transcription = transcriptionText
-          self.isProcessing = false
-          self.showError = false
-
-          // Clean up the audio file after processing
-          self.audioRecorder.deleteCurrentRecording()
-        }
-      } catch {
-        await MainActor.run {
-          print("TRANSCRIPTION ERROR: \(error.localizedDescription)")
+    // First transcribe the audio
+    speechRecognizer.transcribe(audioURL: audioURL) { result in
+      DispatchQueue.main.async {
+        switch result {
+        case .success(let transcriptionResult):
+          self.transcription = transcriptionResult.text
+          self.utterances = transcriptionResult.utterances
+          self.sendToAPI()
+        case .failure(let error):
           self.isProcessing = false
           self.showError = true
           self.errorMessage = "Transcription failed: \(error.localizedDescription)"
-
-          // Clean up the audio file even on error
+          self.speechScore = 0.0
           self.audioRecorder.deleteCurrentRecording()
         }
       }
     }
+  }
+
+  private func sendToAPI() {
+    guard !utterances.isEmpty else {
+      isProcessing = false
+      showError = true
+      errorMessage = "No utterances to analyze"
+      speechScore = 0.0
+      audioRecorder.deleteCurrentRecording()
+      return
+    }
+
+    // Prepare data for API
+    let utteranceData = utterances.map { utterance in
+      [
+        "utterance": utterance.text,
+        "duration": utterance.duration,
+      ]
+    }
+
+    // Call API
+    alzheimerAPI.predict(utterances: utteranceData) { result in
+      DispatchQueue.main.async {
+        self.isProcessing = false
+
+        switch result {
+        case .success(let response):
+          self.predictionResult = response
+          // Clear any errors on successful API response
+          self.showError = false
+          self.errorMessage = ""
+          // Extract probability/score from response if available
+          if let probability = response.probability {
+            self.speechScore = probability
+          } else {
+            // Default scoring based on prediction
+            self.speechScore = response.prediction.lowercased().contains("positive") ? 0.8 : 0.2
+          }
+        case .failure(let error):
+          self.showError = true
+          self.errorMessage = "API Error: \(error.localizedDescription)"
+          self.speechScore = 0.0
+        }
+
+        // Clean up the audio file after processing
+        self.audioRecorder.deleteCurrentRecording()
+      }
+    }
+  }
+}
+
+// MARK: - Data Models
+struct Utterance {
+  let text: String
+  let duration: Double
+}
+
+struct TranscriptionResult {
+  let text: String
+  let utterances: [Utterance]
+}
+
+struct APIResponse {
+  let prediction: String
+  let probability: Double?
+  let additionalInfo: [String: Any]?
+
+  init(from dictionary: [String: Any]) {
+    self.prediction = dictionary["prediction"] as? String ?? "Unknown"
+    self.probability = dictionary["probability"] as? Double
+
+    // Store any additional fields
+    var info: [String: Any] = [:]
+    for (key, value) in dictionary {
+      if key != "prediction" && key != "probability" {
+        info[key] = value
+      }
+    }
+    self.additionalInfo = info.isEmpty ? nil : info
+  }
+}
+
+// MARK: - Audio Recorder
+class AudioRecorder: NSObject, ObservableObject {
+  @Published var isRecording = false
+  @Published var hasRecording = false
+
+  private var audioRecorder: AVAudioRecorder?
+  var audioFileURL: URL?
+
+  func requestPermission() {
+    AVAudioSession.sharedInstance().requestRecordPermission { _ in }
+  }
+
+  func startRecording() {
+    let audioSession = AVAudioSession.sharedInstance()
+
+    do {
+      try audioSession.setCategory(.playAndRecord, mode: .default)
+      try audioSession.setActive(true)
+
+      let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+      let audioFilename = documentsPath.appendingPathComponent("recording.m4a")
+      audioFileURL = audioFilename
+
+      let settings = [
+        AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+        AVSampleRateKey: 44100,
+        AVNumberOfChannelsKey: 1,
+        AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue,
+      ]
+
+      audioRecorder = try AVAudioRecorder(url: audioFilename, settings: settings)
+      audioRecorder?.record()
+
+      DispatchQueue.main.async {
+        self.isRecording = true
+      }
+    } catch {
+      print("Failed to start recording: \(error)")
+    }
+  }
+
+  func stopRecording() {
+    audioRecorder?.stop()
+    audioRecorder = nil
+
+    DispatchQueue.main.async {
+      self.isRecording = false
+      self.hasRecording = true
+    }
+  }
+
+  func deleteCurrentRecording() {
+    if let url = audioFileURL {
+      try? FileManager.default.removeItem(at: url)
+    }
+    audioFileURL = nil
+    hasRecording = false
+  }
+}
+
+// MARK: - Speech Recognizer
+class SpeechRecognizer: NSObject, ObservableObject {
+  private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+
+  func transcribe(audioURL: URL, completion: @escaping (Result<TranscriptionResult, Error>) -> Void)
+  {
+    guard let recognizer = speechRecognizer, recognizer.isAvailable else {
+      completion(
+        .failure(
+          NSError(
+            domain: "SpeechRecognizer", code: 1,
+            userInfo: [NSLocalizedDescriptionKey: "Speech recognizer not available"])))
+      return
+    }
+
+    let request = SFSpeechURLRecognitionRequest(url: audioURL)
+    request.shouldReportPartialResults = false
+
+    recognizer.recognitionTask(with: request) { result, error in
+      if let error = error {
+        completion(.failure(error))
+        return
+      }
+
+      guard let result = result, result.isFinal else {
+        return
+      }
+
+      // Process segments to create utterances
+      var utterances: [Utterance] = []
+      let segments = result.bestTranscription.segments
+
+      // Group segments into sentences/utterances
+      var currentUtterance = ""
+      var startTime: TimeInterval = 0
+      var endTime: TimeInterval = 0
+
+      for (index, segment) in segments.enumerated() {
+        if index == 0 {
+          startTime = segment.timestamp
+        }
+
+        currentUtterance += segment.substring + " "
+        endTime = segment.timestamp + segment.duration
+
+        // Check if this segment ends a sentence
+        let trimmed = segment.substring.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasSuffix(".") || trimmed.hasSuffix("!") || trimmed.hasSuffix("?")
+          || index == segments.count - 1
+        {
+          let duration = endTime - startTime
+          utterances.append(
+            Utterance(
+              text: currentUtterance.trimmingCharacters(in: .whitespaces), duration: duration))
+
+          currentUtterance = ""
+          if index < segments.count - 1 {
+            startTime = segments[index + 1].timestamp
+          }
+        }
+      }
+
+      // If no sentence breaks were found, treat the whole transcription as one utterance
+      if utterances.isEmpty && !segments.isEmpty {
+        let duration =
+          segments.last!.timestamp + segments.last!.duration - segments.first!.timestamp
+        utterances.append(
+          Utterance(text: result.bestTranscription.formattedString, duration: duration))
+      }
+
+      let transcriptionResult = TranscriptionResult(
+        text: result.bestTranscription.formattedString,
+        utterances: utterances
+      )
+
+      completion(.success(transcriptionResult))
+    }
+  }
+}
+
+// MARK: - API Client
+class AlzheimerAPI: ObservableObject {
+  private let apiURL = "https://cogniplayapp-alzheimer-detection-api.hf.space/predict"
+
+  func predict(
+    utterances: [[String: Any]],
+    completion: @escaping (Result<APIResponse, Error>) -> Void
+  ) {
+    guard let url = URL(string: apiURL) else {
+      completion(
+        .failure(
+          NSError(domain: "API", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])))
+      return
+    }
+
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+    let payload = ["trial_data": utterances]
+
+    do {
+      request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+    } catch {
+      completion(.failure(error))
+      return
+    }
+
+    URLSession.shared.dataTask(with: request) { data, response, error in
+      if let error = error {
+        completion(.failure(error))
+        return
+      }
+
+      guard let data = data else {
+        completion(
+          .failure(
+            NSError(
+              domain: "API", code: 2, userInfo: [NSLocalizedDescriptionKey: "No data received"])))
+        return
+      }
+
+      do {
+        if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+          let apiResponse = APIResponse(from: json)
+          completion(.success(apiResponse))
+        } else {
+          completion(
+            .failure(
+              NSError(
+                domain: "API", code: 3,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid response format"])))
+        }
+      } catch {
+        completion(.failure(error))
+      }
+    }.resume()
   }
 }

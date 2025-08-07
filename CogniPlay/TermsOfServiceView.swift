@@ -10,6 +10,7 @@ struct TermsOfServiceView: View {
     VStack(spacing: 0) {
       // Terms Content
       VStack(spacing: 20) {
+        // Terms title
         Text("Terms of Service")
           .font(.title)
           .fontWeight(.bold)

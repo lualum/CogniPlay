@@ -1,3 +1,7 @@
+// lucas lum dev and creator of cogniplay
+// deep learning enabled multitask cognitive assessment app for dementia patients
+// using games and wearable data
+
 import SwiftUI
 
 // Protocol for task scores to ensure they can be encoded/decoded
@@ -98,6 +102,20 @@ class SessionManager: ObservableObject {
 
   @Published var currentSession: Session?
   @Published var sessions: [Session] = []
+
+  private init() {
+    // Initialize with data loading on creation
+    initializeSession()
+  }
+
+  private func initializeSession() {
+    let didLoadExistingData = loadSessions()
+
+    // If no existing data was loaded or no current session exists, create a new one
+    if !didLoadExistingData || currentSession == nil {
+      createNewSession()
+    }
+  }
 
   func createNewSession() {
     let newSession = Session(
@@ -221,6 +239,7 @@ class SessionManager: ObservableObject {
       }
     }
 
+    // Unlock test pattern if all non-optional tasks are completed
     if sessions[sessionIndex].tasks.filter({ !$0.isOptional && $0.id != "test" }).allSatisfy({
       $0.isCompleted
     }) {
@@ -236,17 +255,17 @@ class SessionManager: ObservableObject {
   private func createDefaultTasks() -> [SessionTask] {
     return [
       SessionTask(
-        id: "setup", name: "Setup Pattern", duration: "(0:30)", isLocked: false),
+        id: "setup", name: "Setup Pattern", duration: "", isLocked: false),
       SessionTask(id: "whack", name: "Whack-a-Mole", duration: "(0:30)"),
-      SessionTask(id: "simon", name: "Simon Memory", duration: "(1:30)"),
-      SessionTask(id: "speech", name: "Speech", duration: "(1:00)"),
-      SessionTask(id: "test", name: "Test Pattern", duration: "(0:30)"),
+      SessionTask(id: "simon", name: "Play Simon", duration: ""),
+      SessionTask(id: "speech", name: "Describe Image", duration: "(1:00)"),
+      SessionTask(id: "test", name: "Recall Pattern", duration: "(0:30)"),
       SessionTask(
-        id: "heartbeat", name: "Link Watch Heartbeat Data", duration: "",
+        id: "heartbeat", name: "Link Wearable Sensor Data", duration: "",
         isOptional: true),
-      SessionTask(
-        id: "previous", name: "Link Previous Data", duration: "",
-        isOptional: true),
+      // SessionTask(
+      //   id: "previous", name: "Link Previous Data", duration: "",
+      //   isOptional: true),
     ]
   }
 
@@ -267,7 +286,6 @@ class SessionManager: ObservableObject {
   @discardableResult
   func loadSessions() -> Bool {
     var didLoadData = false
-    var isDifferentFromDefault = false
 
     // Load all sessions
     if let data = UserDefaults.standard.data(forKey: "sessions"),
@@ -289,15 +307,9 @@ class SessionManager: ObservableObject {
       if !sessions.contains(where: { $0.id == session.id }) {
         sessions.append(session)
       }
-
-      // Check if current session differs from default session
-      let defaultTasks = createDefaultTasks()
-      if session.tasks != defaultTasks {
-        isDifferentFromDefault = true
-      }
     }
 
-    return didLoadData && isDifferentFromDefault
+    return didLoadData
   }
 
   // Helper method to reset/clear all data (useful for testing)
@@ -306,6 +318,33 @@ class SessionManager: ObservableObject {
     sessions.removeAll()
     UserDefaults.standard.removeObject(forKey: "currentSession")
     UserDefaults.standard.removeObject(forKey: "sessions")
+  }
+
+  // Public method to ensure there's always a current session
+  func ensureCurrentSession() {
+    if currentSession == nil {
+      createNewSession()
+    }
+  }
+  // Add this method to your SessionManager class
+
+  func hasSessionWithProgress() -> Bool {
+    // First ensure sessions are loaded
+    loadSessions()
+
+    guard let session = currentSession else { return false }
+
+    // Check if any task is completed OR has a score (indicating progress)
+    let hasCompletedTasks = session.tasks.contains { $0.isCompleted }
+    let hasTasksWithScores = session.tasks.contains { $0.score != nil }
+
+    // Check if any non-optional task has been unlocked beyond the first one
+    // (indicating the user has at least started the setup)
+    let unlockedTasks = session.tasks.filter { !$0.isLocked }
+    let hasProgressBeyondInitial =
+      unlockedTasks.count > 1 || (unlockedTasks.count == 1 && unlockedTasks.first?.id != "setup")
+
+    return hasCompletedTasks || hasTasksWithScores || hasProgressBeyondInitial
   }
 }
 

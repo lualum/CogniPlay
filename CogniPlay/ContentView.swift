@@ -6,20 +6,17 @@ struct ContentView: View {
 
   // Persistent state variables using @AppStorage
   @AppStorage("termsAccepted") private var termsAccepted = false
-  @AppStorage("whackAMoleScore") private var whackAMoleScore: Double = 0
-  @AppStorage("simonScore") private var simonScore: Int = 0
-  @AppStorage("speechScore") private var speechScore: Double = 0
 
   @AppStorage("currentPatternData") private var currentPatternData: Data = Data()
 
   @State private var currentView: AppView = .home
   @StateObject private var sessionManager = SessionManager.shared
-
   // State variable for the current pattern that syncs with AppStorage
   @State private var currentPattern: [ShapeItem] = []
 
   enum AppView {
-    case home, sessionChecklist, about, setupPattern, speech, simon, whackAMole, testPattern
+    case home, sessionChecklist, about, setupPattern, speech, simon, whackAMole, testPattern,
+      results
   }
 
   var body: some View {
@@ -40,9 +37,7 @@ struct ContentView: View {
                 currentView: $currentView
               )
             case .sessionChecklist:
-              SessionChecklistView(
-                currentView: $currentView
-              )
+              SessionChecklistView(currentView: $currentView)
             case .about:
               AboutView(currentView: $currentView)
             case .setupPattern:
@@ -51,15 +46,15 @@ struct ContentView: View {
                 currentPattern: $currentPattern
               )
             case .speech:
-              SpeechView(currentView: $currentView, speechScore: $speechScore)
+              SpeechView(currentView: $currentView)
             case .simon:
-              SimonView(currentView: $currentView, simonScore: $simonScore)
+              SimonView(currentView: $currentView)
             case .whackAMole:
-              WhackAMoleView(
-                currentView: $currentView,
-                whackAMoleScore: $whackAMoleScore)
+              WhackAMoleView(currentView: $currentView)
             case .testPattern:
               TestPatternView(currentView: $currentView, currentPattern: $currentPattern)
+            case .results:
+              ResultsView(currentView: $currentView)
             }
           }
           .frame(maxWidth: .infinity, maxHeight: .infinity)

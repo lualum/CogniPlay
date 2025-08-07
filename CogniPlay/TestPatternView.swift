@@ -23,7 +23,7 @@ struct TestPatternView: View {
     VStack(spacing: 0) {
       // Header with title
       VStack(spacing: 20) {
-        Text("Memory Test")
+        Text("Recall Pattern")
           .font(.largeTitle)
           .fontWeight(.bold)
           .foregroundColor(.black)
@@ -197,7 +197,7 @@ struct TestPatternView: View {
           .disabled(!isSelectionComplete)
         } else {
           Button("Continue") {
-            sessionManager.completeTask("test")
+            sessionManager.completeTask("test", withScore: TestPatternScore(score: testResult))
             currentView = .sessionChecklist
           }
           .font(.title2)

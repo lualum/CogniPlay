@@ -45,7 +45,7 @@ struct SessionChecklistView: View {
 
             // Go to Results Button
             Button(action: {
-              //currentView = .results
+              currentView = .results
             }) {
               Text("Go to Results")
                 .font(.title2)

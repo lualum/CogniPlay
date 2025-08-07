@@ -10,7 +10,6 @@ import SwiftUI
 // MARK: - Simon Game View
 struct SimonView: View {
   @Binding var currentView: ContentView.AppView
-  @Binding var simonScore: Int
   @ObservedObject private var sessionManager = SessionManager.shared
 
   @State private var gameState: SimonGameState = .waiting

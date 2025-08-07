@@ -10,7 +10,6 @@ import SwiftUI
 // MARK: - Whack-a-Mole View
 struct WhackAMoleView: View {
   @Binding var currentView: ContentView.AppView
-  @Binding var whackAMoleScore: Double
 
   @ObservedObject private var sessionManager = SessionManager.shared
 
@@ -114,12 +113,15 @@ struct WhackAMoleView: View {
           startGame()
         } else if gameCompleted {
           stopGame()
-          whackAMoleScore = moleLifespanData.reduce(0, +) / Double(moleLifespanData.count)
+          // sessionManager.completeTask(
+          //   "whack",
+          //   withScore: WhackAMoleScore(
+          //     score: moleLifespanData.reduce(0, +) / Double(moleLifespanData.count)
+          //   )
+          // )
           sessionManager.completeTask(
             "whack",
-            withScore: WhackAMoleScore(
-              score: whackAMoleScore
-            )
+            withScore: WhackAMoleScore(score: Double(score))
           )
           currentView = .sessionChecklist
         }

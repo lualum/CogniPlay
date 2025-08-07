@@ -20,7 +20,7 @@ struct HomeView: View {
         .padding(.bottom, 40)
 
       VStack(spacing: 20) {
-        // Check if a session exists
+        // Check if a session exists with progress
         if hasExistingSession {
           // Continue Session Button
           Button(action: {
@@ -44,7 +44,7 @@ struct HomeView: View {
           // Reset Session Button
           Button(action: {
             sessionManager.createNewSession()
-            hasExistingSession = true  // Update state
+            hasExistingSession = false
             currentView = .sessionChecklist
           }) {
             VStack(spacing: 5) {
@@ -90,7 +90,7 @@ struct HomeView: View {
         }
 
         // Results History Button
-        Button(action: {
+        /*Button(action: {
           // Navigate to results history (implement later)
           print("Results History tapped")  // Debug action
           //currentView = .results
@@ -109,7 +109,7 @@ struct HomeView: View {
           .background(Color.purple.opacity(0.8))
           .cornerRadius(12)
         }
-
+        */
         // Info Button
         Button(action: {
           currentView = .about
@@ -134,8 +134,8 @@ struct HomeView: View {
     }
     .background(Color.white)
     .onAppear {
-      // Load sessions when view appears, not in body
-      hasExistingSession = sessionManager.loadSessions()
+      // Check if there's a session with actual progress (not just default state)
+      hasExistingSession = sessionManager.hasSessionWithProgress()
     }
     .environmentObject(sessionManager)
   }
