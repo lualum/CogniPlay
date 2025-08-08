@@ -19,6 +19,12 @@ struct HomeView: View {
         .foregroundColor(.black)  // Ensure text is visible
         .padding(.bottom, 40)
 
+      Image("Icon")
+        .resizable()
+        .aspectRatio(contentMode: .fit)
+        .frame(width: 200, height: 200)
+        .padding(.bottom, 40)
+
       VStack(spacing: 20) {
         // Check if a session exists with progress
         if hasExistingSession {

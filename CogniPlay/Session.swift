@@ -1,5 +1,6 @@
 // lucas lum dev and creator of cogniplay
-// deep learning enabled multitask cognitive assessment app for dementia patients
+// deep learning enabled multitask cognitive assessment
+//  app for dementia patients
 // using games and wearable data
 
 import SwiftUI
@@ -258,8 +259,8 @@ class SessionManager: ObservableObject {
         id: "setup", name: "Setup Pattern", duration: "", isLocked: false),
       SessionTask(id: "whack", name: "Whack-a-Mole", duration: "(0:30)"),
       SessionTask(id: "simon", name: "Play Simon", duration: ""),
-      SessionTask(id: "speech", name: "Describe Image", duration: "(1:00)"),
-      SessionTask(id: "test", name: "Recall Pattern", duration: "(0:30)"),
+      SessionTask(id: "speech", name: "Describe Image", duration: "(0:30)"),
+      SessionTask(id: "test", name: "Recall Pattern", duration: ""),
       SessionTask(
         id: "heartbeat", name: "Link Wearable Sensor Data", duration: "",
         isOptional: true),
