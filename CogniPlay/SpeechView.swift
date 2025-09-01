@@ -71,21 +71,12 @@ struct SpeechView: View {
 
   // Update your resultsScrollView to not show errors:
   private var resultsScrollView: some View {
-    ScrollView {
-      VStack(spacing: 20) {
-        // Transcription display
-        if !transcription.isEmpty {
-          transcriptionView
-        }
-
-        // Prediction results display
-        if let result = predictionResult {
-          predictionResultView(result: result)
-        }
+    VStack(spacing: 20) {
+      if let result = predictionResult {
+        predictionResultView(result: result)
       }
-      .padding(.top, 20)  // Add some top padding when results are displayed
     }
-    // Remove the frame height restriction to let it expand
+    .padding(.top, 20)
   }
 
   // MARK: - View Components
@@ -103,22 +94,6 @@ struct SpeechView: View {
     .padding(.bottom, 30)
   }
 
-  private var transcriptionView: some View {
-    VStack(alignment: .leading, spacing: 5) {
-      Text("Transcription:")
-        .font(.headline)
-        .fontWeight(.semibold)
-        .foregroundColor(.blue)
-
-      Text(transcription)
-        .font(.body)
-        .padding()
-        .background(Color.blue.opacity(0.1))
-        .cornerRadius(8)
-    }
-    .padding(.horizontal, 20)
-  }
-
   private func predictionResultView(result: APIResponse) -> some View {
     VStack(alignment: .leading, spacing: 10) {
       Text("Analysis Results:")
@@ -131,32 +106,23 @@ struct SpeechView: View {
           Text("Prediction:")
             .fontWeight(.medium)
           Spacer()
-          Text(result.prediction)
+          Text(result.prediction == 1 ? "Dementia" : "Normal")
             .fontWeight(.semibold)
-            .foregroundColor(result.prediction.lowercased().contains("positive") ? .red : .green)
+            .foregroundColor(result.prediction == 1 ? .red : .green)
         }
 
-        HStack {
-          Text("Speech Score:")
-            .fontWeight(.medium)
-          Spacer()
-          Text(String(format: "%.2f", speechScore))
-            .fontWeight(.semibold)
-            .foregroundColor(.blue)
-        }
-
-        // Display additional info if available
-        if let additionalInfo = result.additionalInfo {
-          ForEach(Array(additionalInfo.keys.sorted()), id: \.self) { key in
-            HStack {
-              Text("\(key.capitalized):")
-                .fontWeight(.medium)
-              Spacer()
-              Text("\(additionalInfo[key] ?? "N/A")")
-                .fontWeight(.semibold)
-            }
-          }
-        }
+        // // Display additional info if available
+        // if let additionalInfo = result.additionalInfo {
+        //   ForEach(Array(additionalInfo.keys.sorted()), id: \.self) { key in
+        //     HStack {
+        //       Text("\(key.capitalized):")
+        //         .fontWeight(.medium)
+        //       Spacer()
+        //       Text("\(additionalInfo[key] ?? "N/A")")
+        //         .fontWeight(.semibold)
+        //     }
+        //   }
+        // }
       }
       .padding()
       .background(Color.green.opacity(0.1))
@@ -407,8 +373,7 @@ extension SpeechView {
     // Check minimum duration after stopping
     if recordingDuration < 30 {
       showError = true
-      errorMessage =
-        ""
+      errorMessage = ""
     }
   }
 
@@ -468,16 +433,16 @@ extension SpeechView {
       return
     }
 
-    // Prepare data for API
-    let utteranceData = utterances.map { utterance in
+    // Prepare data for API - each sentence with its own duration
+    let sentenceData = utterances.map { utterance in
       [
-        "utterance": utterance.text,
+        "sentence": utterance.text,
         "duration": utterance.duration,
       ]
     }
 
-    // Call API
-    alzheimerAPI.predict(utterances: utteranceData) { result in
+    // Call API with individual sentences
+    alzheimerAPI.predict(sentences: sentenceData) { result in
       DispatchQueue.main.async {
         self.isProcessing = false
 
@@ -492,7 +457,7 @@ extension SpeechView {
             self.speechScore = probability
           } else {
             // Default scoring based on prediction
-            self.speechScore = response.prediction.lowercased().contains("positive") ? 0.8 : 0.2
+            self.speechScore = response.prediction == 1 ? 0.8 : 0.2
           }
         case .failure(let error):
           self.showError = true
@@ -519,12 +484,12 @@ struct TranscriptionResult {
 }
 
 struct APIResponse {
-  let prediction: String
+  let prediction: Int?
   let probability: Double?
   let additionalInfo: [String: Any]?
 
   init(from dictionary: [String: Any]) {
-    self.prediction = dictionary["prediction"] as? String ?? "Unknown"
+    self.prediction = dictionary["prediction"] as? Int
     self.probability = dictionary["probability"] as? Double
 
     // Store any additional fields
@@ -626,47 +591,8 @@ class SpeechRecognizer: NSObject, ObservableObject {
         return
       }
 
-      // Process segments to create utterances
-      var utterances: [Utterance] = []
       let segments = result.bestTranscription.segments
-
-      // Group segments into sentences/utterances
-      var currentUtterance = ""
-      var startTime: TimeInterval = 0
-      var endTime: TimeInterval = 0
-
-      for (index, segment) in segments.enumerated() {
-        if index == 0 {
-          startTime = segment.timestamp
-        }
-
-        currentUtterance += segment.substring + " "
-        endTime = segment.timestamp + segment.duration
-
-        // Check if this segment ends a sentence
-        let trimmed = segment.substring.trimmingCharacters(in: .whitespaces)
-        if trimmed.hasSuffix(".") || trimmed.hasSuffix("!") || trimmed.hasSuffix("?")
-          || index == segments.count - 1
-        {
-          let duration = endTime - startTime
-          utterances.append(
-            Utterance(
-              text: currentUtterance.trimmingCharacters(in: .whitespaces), duration: duration))
-
-          currentUtterance = ""
-          if index < segments.count - 1 {
-            startTime = segments[index + 1].timestamp
-          }
-        }
-      }
-
-      // If no sentence breaks were found, treat the whole transcription as one utterance
-      if utterances.isEmpty && !segments.isEmpty {
-        let duration =
-          segments.last!.timestamp + segments.last!.duration - segments.first!.timestamp
-        utterances.append(
-          Utterance(text: result.bestTranscription.formattedString, duration: duration))
-      }
+      let utterances = self.segmentIntoSentences(segments: segments)
 
       let transcriptionResult = TranscriptionResult(
         text: result.bestTranscription.formattedString,
@@ -676,6 +602,78 @@ class SpeechRecognizer: NSObject, ObservableObject {
       completion(.success(transcriptionResult))
     }
   }
+
+  private func segmentIntoSentences(segments: [SFTranscriptionSegment]) -> [Utterance] {
+    var utterances: [Utterance] = []
+    var currentSentence = ""
+    var sentenceStartTime: TimeInterval = 0
+    var wordCount = 0
+
+    for (index, segment) in segments.enumerated() {
+      if index == 0 || currentSentence.isEmpty {
+        sentenceStartTime = segment.timestamp
+      }
+
+      currentSentence += segment.substring
+      wordCount += 1
+
+      let trimmedSubstring = segment.substring.trimmingCharacters(in: .whitespaces)
+      let isEndOfSentence =
+        trimmedSubstring.hasSuffix(".") || trimmedSubstring.hasSuffix("!")
+        || trimmedSubstring.hasSuffix("?")
+
+      let isLastSegment = index == segments.count - 1
+      let hasMinimumWords = wordCount >= 3  // Minimum words per sentence
+
+      // End sentence if: punctuation found, last segment, or sentence is getting too long
+      if (isEndOfSentence && hasMinimumWords) || isLastSegment || wordCount >= 15 {
+        let sentenceEndTime = segment.timestamp + segment.duration
+        let duration = sentenceEndTime - sentenceStartTime
+
+        // Only add sentences with meaningful duration and content
+        let cleanSentence = currentSentence.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !cleanSentence.isEmpty && duration > 0.5 {
+          utterances.append(Utterance(text: cleanSentence, duration: duration))
+        }
+
+        // Reset for next sentence
+        currentSentence = ""
+        wordCount = 0
+      } else {
+        // Add space between words if not at punctuation
+        if !trimmedSubstring.hasSuffix(",") && !trimmedSubstring.hasSuffix(".")
+          && !trimmedSubstring.hasSuffix("!") && !trimmedSubstring.hasSuffix("?")
+        {
+          currentSentence += " "
+        } else {
+          currentSentence += " "
+        }
+      }
+    }
+
+    // Handle any remaining sentence
+    if !currentSentence.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !segments.isEmpty
+    {
+      let duration = segments.last!.timestamp + segments.last!.duration - sentenceStartTime
+      if duration > 0.5 {
+        utterances.append(
+          Utterance(
+            text: currentSentence.trimmingCharacters(in: .whitespacesAndNewlines),
+            duration: duration
+          ))
+      }
+    }
+
+    // Fallback: if no sentences were created, create one from the full transcription
+    if utterances.isEmpty && !segments.isEmpty {
+      let totalDuration =
+        segments.last!.timestamp + segments.last!.duration - segments.first!.timestamp
+      let fullText = segments.map { $0.substring }.joined(separator: " ")
+      utterances.append(Utterance(text: fullText, duration: totalDuration))
+    }
+
+    return utterances
+  }
 }
 
 // MARK: - API Client
@@ -683,7 +681,7 @@ class AlzheimerAPI: ObservableObject {
   private let apiURL = "https://cogniplayapp-alzheimer-detection-api.hf.space/predict"
 
   func predict(
-    utterances: [[String: Any]],
+    sentences: [[String: Any]],
     completion: @escaping (Result<APIResponse, Error>) -> Void
   ) {
     guard let url = URL(string: apiURL) else {
@@ -697,7 +695,8 @@ class AlzheimerAPI: ObservableObject {
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-    let payload = ["trial_data": utterances]
+    // Updated payload structure for individual sentences
+    let payload = ["sentences": sentences]
 
     do {
       request.httpBody = try JSONSerialization.data(withJSONObject: payload)

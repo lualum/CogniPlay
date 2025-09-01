@@ -10,11 +10,7 @@ struct ResultsView: View {
   }
 
   private var scoreColor: Color {
-    switch mmseScore {
-    case 24...30: return .green
-    case 18...23: return .orange
-    default: return .red
-    }
+    return .gray
   }
 
   private var scoreInterpretation: String {
@@ -174,24 +170,20 @@ struct TaskScoreCard: View {
     case "whack":
       if let score = sessionManager.getTaskScore(task.id, as: WhackAMoleScore.self) {
         let percentage = score.score
-        let color: Color = percentage >= 80 ? .green : percentage >= 60 ? .orange : .red
-        return ("\(score.score)", "", color)
+        return ("\(score.score)", "", .gray)
       }
     case "simon":
       if let score = sessionManager.getTaskScore(task.id, as: SimonMemoryScore.self) {
-        let color: Color = score.score >= 8 ? .green : score.score >= 5 ? .orange : .red
-        return ("\(score.score)", "", color)
+        return ("\(score.score)", "", .gray)
       }
     case "speech":
       if let score = sessionManager.getTaskScore(task.id, as: SpeechScore.self) {
         let percentage = score.probability * 100
-        let color: Color = percentage >= 80 ? .green : percentage >= 60 ? .orange : .red
-        return (String(format: "%.1f", percentage), "", color)
+        return (String(format: "%.1f", percentage), "", .gray)
       }
     case "test":
       if let score = sessionManager.getTaskScore(task.id, as: TestPatternScore.self) {
-        let color: Color = score.score >= 8 ? .green : score.score >= 5 ? .orange : .red
-        return ("\(score.score)", "", color)
+        return ("\(score.score)", "", .gray)
       }
     default:
       if let score = sessionManager.getTaskScore(task.id, as: GenericScore.self) {
@@ -339,7 +331,7 @@ struct TaskDetailsSection: View {
         .fontWeight(.bold)
 
       LazyVStack(spacing: 12) {
-        ForEach(completedTasks, id: \.id) { task in
+        ForEach(completedTasks.filter { $0.id != "setup" }, id: \.id) { task in
           TaskDetailRow(task: task)
         }
       }
