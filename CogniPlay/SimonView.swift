@@ -1,10 +1,3 @@
-//
-//  SimonView.swift
-//  CogniPlay
-//
-//  Created by Lucas Lum on 6/29/25.
-//
-
 import SwiftUI
 
 // MARK: - Simon Game View

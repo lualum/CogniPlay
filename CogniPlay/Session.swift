@@ -1,8 +1,3 @@
-// lucas lum dev and creator of cogniplay
-// deep learning enabled multitask cognitive assessment
-//  app for dementia patients
-// using games and wearable data
-
 import SwiftUI
 
 // Protocol for task scores to ensure they can be encoded/decoded

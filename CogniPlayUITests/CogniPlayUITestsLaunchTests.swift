@@ -1,10 +1,3 @@
-//
-//  CogniPlayUITestsLaunchTests.swift
-//  CogniPlayUITests
-//
-//  Created by Lucas Lum on 6/28/25.
-//
-
 import XCTest
 
 final class CogniPlayUITestsLaunchTests: XCTestCase {
