@@ -1,22 +1,21 @@
 import SwiftUI
 
 struct HomeView: View {
-  @Binding var showingTerms: Bool
   @Binding var termsAccepted: Bool
   @Binding var currentView: ContentView.AppView
 
   @ObservedObject private var sessionManager = SessionManager.shared
   @State private var hasExistingSession = false
+  @State private var showingTerms = false
 
   var body: some View {
     VStack(spacing: 0) {
       Spacer()
 
-      // App Title
       Text("CogniPlay")
         .font(.largeTitle)
         .fontWeight(.bold)
-        .foregroundColor(.black)  // Ensure text is visible
+        .foregroundColor(.black)
         .padding(.bottom, 40)
 
       Image("Icon")
@@ -26,9 +25,7 @@ struct HomeView: View {
         .padding(.bottom, 40)
 
       VStack(spacing: 20) {
-        // Check if a session exists with progress
         if hasExistingSession {
-          // Continue Session Button
           Button(action: {
             currentView = .sessionChecklist
           }) {
@@ -73,7 +70,7 @@ struct HomeView: View {
           Button(action: {
             if termsAccepted {
               sessionManager.createNewSession()
-              hasExistingSession = true  // Update state
+              hasExistingSession = true
               currentView = .sessionChecklist
             } else {
               showingTerms = true
@@ -98,7 +95,7 @@ struct HomeView: View {
         // Results History Button
         /*Button(action: {
           // Navigate to results history (implement later)
-          print("Results History tapped")  // Debug action
+          print("Results History tapped")
           //currentView = .results
         }) {
           VStack(spacing: 5) {
@@ -116,6 +113,7 @@ struct HomeView: View {
           .cornerRadius(12)
         }
         */
+
         // Info Button
         Button(action: {
           currentView = .about
@@ -139,8 +137,11 @@ struct HomeView: View {
       Spacer()
     }
     .background(Color.white)
+    .sheet(isPresented: $showingTerms) {
+      TermsView(
+        showingTerms: $showingTerms, termsAccepted: $termsAccepted, currentView: $currentView)
+    }
     .onAppear {
-      // Check if there's a session with actual progress (not just default state)
       hasExistingSession = sessionManager.hasSessionWithProgress()
     }
     .environmentObject(sessionManager)

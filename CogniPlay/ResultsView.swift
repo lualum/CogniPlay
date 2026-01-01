@@ -72,12 +72,10 @@ struct ResultsView: View {
       )
       .padding(.horizontal)
 
-      // Task Summary with Raw Scores
       TaskSummaryView()
 
       Spacer()
 
-      // Action Buttons
       VStack(spacing: 12) {
         Button(action: {
           showingDetails = true
@@ -123,7 +121,7 @@ struct ResultsView: View {
 struct TaskSummaryView: View {
   @ObservedObject private var sessionManager = SessionManager.shared
 
-  private var completedTasks: [SessionTask] {
+  private var completedTasks: [Task] {
     sessionManager.currentSession?.tasks.filter { $0.isCompleted && !$0.isOptional } ?? []
   }
 
@@ -145,7 +143,7 @@ struct TaskSummaryView: View {
           GridItem(.flexible()),
         ], spacing: 8
       ) {
-        ForEach(completedTasks, id: \.id) { task in
+        ForEach(completedTasks) { task in
           TaskScoreCard(task: task)
         }
       }
@@ -161,29 +159,16 @@ struct TaskSummaryView: View {
 }
 
 struct TaskScoreCard: View {
-  let task: SessionTask
+  let task: Task
   @ObservedObject private var sessionManager = SessionManager.shared
 
   // Get raw score instead of MMSE score
   private var rawScoreInfo: (value: String, maxValue: String, color: Color) {
     switch task.id {
-    case "whack":
-      if let score = sessionManager.getTaskScore(task.id, as: WhackAMoleScore.self) {
-        let percentage = score.score
-        return ("\(score.score)", "", .gray)
-      }
-    case "simon":
-      if let score = sessionManager.getTaskScore(task.id, as: SimonMemoryScore.self) {
-        return ("\(score.score)", "", .gray)
-      }
     case "speech":
       if let score = sessionManager.getTaskScore(task.id, as: SpeechScore.self) {
         let percentage = score.probability * 100
         return (String(format: "%.1f", percentage), "", .gray)
-      }
-    case "test":
-      if let score = sessionManager.getTaskScore(task.id, as: TestPatternScore.self) {
-        return ("\(score.score)", "", .gray)
       }
     default:
       if let score = sessionManager.getTaskScore(task.id, as: GenericScore.self) {
@@ -210,6 +195,7 @@ struct TaskScoreCard: View {
         .font(.caption)
         .foregroundColor(.secondary)
         .multilineTextAlignment(.leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
 
       // Show max value if available
       if !rawScoreInfo.maxValue.isEmpty && rawScoreInfo.maxValue != "%" {
@@ -227,11 +213,10 @@ struct TaskScoreCard: View {
 
   private var taskIcon: String {
     switch task.id {
-    case "whack": return "target"
-    case "simon": return "brain.head.profile"
     case "speech": return "mic.fill"
-    case "setup": return "gear"
-    case "test": return "checkmark.circle"
+    case "srtt": return "bolt.fill"
+    case "corsi": return "square.fill"
+    case "clock": return "clock.fill"
     default: return "circle"
     }
   }
@@ -244,7 +229,7 @@ struct DetailedResultsView: View {
   var body: some View {
     NavigationView {
       ScrollView {
-        LazyVStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 20) {
           // Overall Score Section
           OverallScoreSection()
 
@@ -320,7 +305,7 @@ struct OverallScoreSection: View {
 struct TaskDetailsSection: View {
   @ObservedObject private var sessionManager = SessionManager.shared
 
-  private var completedTasks: [SessionTask] {
+  private var completedTasks: [Task] {
     sessionManager.currentSession?.tasks.filter { $0.isCompleted && !$0.isOptional } ?? []
   }
 
@@ -330,8 +315,8 @@ struct TaskDetailsSection: View {
         .font(.title2)
         .fontWeight(.bold)
 
-      LazyVStack(spacing: 12) {
-        ForEach(completedTasks.filter { $0.id != "setup" }, id: \.id) { task in
+      VStack(spacing: 12) {
+        ForEach(completedTasks.filter { $0.id != "setup" }) { task in
           TaskDetailRow(task: task)
         }
       }
@@ -346,33 +331,17 @@ struct TaskDetailsSection: View {
 }
 
 struct TaskDetailRow: View {
-  let task: SessionTask
+  let task: Task
   @ObservedObject private var sessionManager = SessionManager.shared
 
   // Get raw score display info
   private var rawScoreDisplay: (value: String, unit: String, color: Color) {
     switch task.id {
-    case "whack":
-      if let score = sessionManager.getTaskScore(task.id, as: WhackAMoleScore.self) {
-        let percentage = score.score * 100
-        let color: Color = percentage >= 80 ? .green : percentage >= 60 ? .orange : .red
-        return (String(format: "%.1f", percentage), "%", color)
-      }
-    case "simon":
-      if let score = sessionManager.getTaskScore(task.id, as: SimonMemoryScore.self) {
-        let color: Color = score.score >= 8 ? .green : score.score >= 5 ? .orange : .red
-        return ("\(score.score)", " levels", color)
-      }
     case "speech":
       if let score = sessionManager.getTaskScore(task.id, as: SpeechScore.self) {
         let percentage = score.probability * 100
         let color: Color = percentage >= 80 ? .green : percentage >= 60 ? .orange : .red
         return (String(format: "%.1f", percentage), "% clarity", color)
-      }
-    case "test":
-      if let score = sessionManager.getTaskScore(task.id, as: TestPatternScore.self) {
-        let color: Color = score.score >= 8 ? .green : score.score >= 5 ? .orange : .red
-        return ("\(score.score)", " pts", color)
       }
     default:
       if let score = sessionManager.getTaskScore(task.id, as: GenericScore.self) {
@@ -405,33 +374,15 @@ struct TaskDetailRow: View {
 }
 
 struct TaskSpecificDetails: View {
-  let task: SessionTask
+  let task: Task
   @ObservedObject private var sessionManager = SessionManager.shared
 
   var body: some View {
     VStack(alignment: .leading, spacing: 4) {
       switch task.id {
-      case "whack":
-        if let score = sessionManager.getTaskScore(task.id, as: WhackAMoleScore.self) {
-          Text("Raw Accuracy: \(String(format: "%.3f", score.score))")
-            .font(.caption)
-            .foregroundColor(.secondary)
-        }
-      case "simon":
-        if let score = sessionManager.getTaskScore(task.id, as: SimonMemoryScore.self) {
-          Text("Max Sequence Length: \(score.score)")
-            .font(.caption)
-            .foregroundColor(.secondary)
-        }
       case "speech":
         if let score = sessionManager.getTaskScore(task.id, as: SpeechScore.self) {
           Text("Raw Probability: \(String(format: "%.4f", score.probability))")
-            .font(.caption)
-            .foregroundColor(.secondary)
-        }
-      case "test":
-        if let score = sessionManager.getTaskScore(task.id, as: TestPatternScore.self) {
-          Text("Pattern Score: \(score.score)")
             .font(.caption)
             .foregroundColor(.secondary)
         }
@@ -466,9 +417,8 @@ struct RawDataSection: View {
       }
 
       if showingRawData {
-        LazyVStack(alignment: .leading, spacing: 12) {
-          ForEach(sessionManager.currentSession?.tasks.filter { $0.isCompleted } ?? [], id: \.id) {
-            task in
+        VStack(alignment: .leading, spacing: 12) {
+          ForEach(sessionManager.currentSession?.tasks.filter { $0.isCompleted } ?? []) { task in
             VStack(alignment: .leading, spacing: 8) {
               Text(task.name)
                 .font(.headline)
@@ -505,36 +455,18 @@ struct RawDataSection: View {
 }
 
 struct RawScoreDisplay: View {
-  let task: SessionTask
+  let task: Task
   @ObservedObject private var sessionManager = SessionManager.shared
 
   var body: some View {
     VStack(alignment: .leading, spacing: 2) {
       switch task.id {
-      case "whack":
-        if let score = sessionManager.getTaskScore(task.id, as: WhackAMoleScore.self) {
-          Text("• Raw Number: \(String(format: "%.6f", score.score))")
-            .font(.caption2)
-            .foregroundColor(.secondary)
-        }
-      case "simon":
-        if let score = sessionManager.getTaskScore(task.id, as: SimonMemoryScore.self) {
-          Text("• Max Level Reached: \(score.score)")
-            .font(.caption2)
-            .foregroundColor(.secondary)
-        }
       case "speech":
         if let score = sessionManager.getTaskScore(task.id, as: SpeechScore.self) {
           Text("• Raw Probability: \(String(format: "%.6f", score.probability))")
             .font(.caption2)
             .foregroundColor(.secondary)
           Text("• Percentage: \(String(format: "%.2f%%", score.probability * 100))")
-            .font(.caption2)
-            .foregroundColor(.secondary)
-        }
-      case "test":
-        if let score = sessionManager.getTaskScore(task.id, as: TestPatternScore.self) {
-          Text("• Pattern Score: \(score.score)")
             .font(.caption2)
             .foregroundColor(.secondary)
         }

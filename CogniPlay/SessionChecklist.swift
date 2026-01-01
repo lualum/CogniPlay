@@ -1,6 +1,5 @@
 import SwiftUI
 
-// MARK: - Session Checklist View
 struct SessionChecklistView: View {
   @ObservedObject private var sessionManager = SessionManager.shared
   @Binding var currentView: ContentView.AppView
@@ -21,10 +20,7 @@ struct SessionChecklistView: View {
           if let session = sessionManager.currentSession {
             // Main Tasks
             ForEach(session.tasks.filter { !$0.isOptional }, id: \.id) { task in
-              TaskRow(
-                task: task,
-                currentView: $currentView
-              )
+              TaskRow(task: task, currentView: $currentView)
             }
 
             // Divider
@@ -36,11 +32,7 @@ struct SessionChecklistView: View {
 
             // Optional Tasks
             ForEach(session.tasks.filter { $0.isOptional }, id: \.id) { task in
-              TaskRow(
-                task: task,
-                currentView: $currentView,
-                isOptional: true
-              )
+              TaskRow(task: task, currentView: $currentView, isOptional: true)
             }
 
             // Go to Results Button
@@ -79,9 +71,8 @@ struct SessionChecklistView: View {
   }
 }
 
-// MARK: - Task Row Component
 struct TaskRow: View {
-  let task: SessionTask
+  let task: Task
   @ObservedObject private var sessionManager = SessionManager.shared
   @Binding var currentView: ContentView.AppView
   let isOptional: Bool
@@ -89,11 +80,7 @@ struct TaskRow: View {
   @State private var isAnimatingCompletion = false
   @State private var showCompletionEffect = false
 
-  init(
-    task: SessionTask,
-    currentView: Binding<ContentView.AppView>,
-    isOptional: Bool = false
-  ) {
+  init(task: Task, currentView: Binding<ContentView.AppView>, isOptional: Bool = false) {
     self.task = task
     self._currentView = currentView
     self.isOptional = isOptional
@@ -110,7 +97,6 @@ struct TaskRow: View {
             .scaleEffect(showCompletionEffect ? 1.2 : 1.0)
             .opacity(showCompletionEffect ? 0.3 : 1.0)
         } else {
-          // Uncompleted state - stroke only
           RoundedRectangle(cornerRadius: 3)
             .stroke(task.isLocked ? Color.gray : Color.black, lineWidth: 2)
             .frame(width: 20, height: 20)
@@ -144,16 +130,14 @@ struct TaskRow: View {
         }
 
         if isOptional {
-          Text(
-            "(optional, \(task.name.contains("Apple Watch") ? "Apple Watch required" : "sign in with Google"))"
-          )
-          .font(.caption)
-          .foregroundColor(.gray)
-          .opacity(task.isCompleted ? 0.3 : 1.0)
+          Text("(optional)")
+            .font(.caption)
+            .foregroundColor(.gray)
+            .opacity(task.isCompleted ? 0.3 : 1.0)
         }
       }
 
-      // Action Button with enhanced animations
+      // Action Button
       ZStack {
         if task.isLocked {
           Image(systemName: "lock.fill")
@@ -168,12 +152,9 @@ struct TaskRow: View {
               .font(.title2)
               .foregroundColor(task.isOptional ? .orange : .green)
               .frame(width: 28, height: 28)
-              .scaleEffect(1.0)
-              .animation(.easeInOut(duration: 0.1), value: task.isCompleted)
           }
         }
       }
-      .alignmentGuide(.firstTextBaseline) { d in d[VerticalAlignment.center] }
     }
     .padding(.horizontal, 20)
     .padding(.vertical, 8)
@@ -192,7 +173,6 @@ struct TaskRow: View {
       showCompletionEffect = true
     }
 
-    // Reset animation states
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
       withAnimation(.easeOut(duration: 0.2)) {
         isAnimatingCompletion = false
@@ -203,21 +183,16 @@ struct TaskRow: View {
 
   private func navigateToTask(_ taskId: String) {
     switch taskId {
-    case "setup":
-      currentView = .setupPattern
-    case "whack":
-      currentView = .whackAMole
-    case "simon":
-      currentView = .simon
     case "speech":
       currentView = .speech
-    case "test":
-      currentView = .testPattern
-    case "heartbeat", "previous":
-      // Handle optional tasks
-      sessionManager.completeTask(taskId)
+    case "srtt":
+      currentView = .srtt
+    case "corsi":
+      currentView = .corsi
+    case "clock":
+      currentView = .clock
     default:
-      break
+      sessionManager.completeTask(taskId)
     }
   }
 }

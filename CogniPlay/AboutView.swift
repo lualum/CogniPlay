@@ -5,17 +5,14 @@ struct AboutView: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      // ScrollView takes up all available space
       ScrollView {
         VStack(alignment: .center, spacing: 24) {
-          // Header
           Text("About Our App")
             .font(.largeTitle)
             .fontWeight(.bold)
             .foregroundColor(.primary)
             .frame(maxWidth: .infinity, alignment: .center)
 
-          // About Section
           VStack(alignment: .leading, spacing: 16) {
             SectionHeader(title: "About", icon: "info.circle.fill")
 
@@ -123,7 +120,6 @@ struct AboutView: View {
       .clipShape(RoundedRectangle(cornerRadius: 10))
       .padding(.bottom, 16)
 
-      // Fixed button at bottom
       Button(action: {
         currentView = .about
       }) {
@@ -145,12 +141,10 @@ struct AboutView: View {
         .cornerRadius(10)
       }
       .padding(.horizontal)
-      .padding(.bottom, 16)  // Add padding for safe area if needed
+      .padding(.bottom, 16)
     }
   }
 }
-
-// MARK: - Supporting Views
 
 struct SectionHeader: View {
   let title: String
@@ -221,7 +215,7 @@ struct ScoreRange: View {
       Text(description)
         .font(.body)
         .lineSpacing(2)
-        .multilineTextAlignment(.center)  // ensures multi-line center alignment
+        .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity)
     }
   }

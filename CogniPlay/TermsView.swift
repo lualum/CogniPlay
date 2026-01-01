@@ -1,7 +1,7 @@
 import SwiftUI
 
 // MARK: - Terms of Service View
-struct TermsOfServiceView: View {
+struct TermsView: View {
   @Binding var showingTerms: Bool
   @Binding var termsAccepted: Bool
   @Binding var currentView: ContentView.AppView

@@ -25,32 +25,41 @@ struct SpeechView: View {
   @State private var isProcessing = false
   @State private var errorMessage = ""
   @State private var showError = false
-  @State private var apiKeyValid = true  // Assuming API is available
+  @State private var apiKeyValid = true
+  @State private var showInstructions = true
+
+  // Get task from session
+  private var task: Task? {
+    sessionManager.currentSession?.tasks.first(where: { $0.id == "speech" })
+  }
 
   var body: some View {
     VStack(spacing: 0) {
       Spacer()
 
-      // MARK: - Header
-      headerSection
-
-      // MARK: - Conditional Content: Cookie Image OR Results
-      if hasResults {
-        // Show results when available
-        resultsScrollView
-          .frame(maxHeight: .infinity)  // Take up more space
+      if showInstructions {
+        // Show tutorial
+        tutorialView
       } else {
-        // Show cookie image when no results
-        Image("Cookie")
-          .resizable()
-          .aspectRatio(contentMode: .fit)
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // MARK: - Header
+        headerSection
+
+        // MARK: - Conditional Content: Cookie Image OR Results
+        if hasResults {
+          resultsScrollView
+            .frame(maxHeight: .infinity)
+        } else {
+          Image("Cookie")
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+
+        Spacer()
+
+        // MARK: - Recording Controls
+        recordingControlsSection
       }
-
-      Spacer()
-
-      // MARK: - Recording Controls
-      recordingControlsSection
 
       Spacer()
     }
@@ -63,13 +72,56 @@ struct SpeechView: View {
     }
   }
 
+  // MARK: - Tutorial View
+  private var tutorialView: some View {
+    VStack(alignment: .leading, spacing: 20) {
+      Text("Instructions")
+        .font(.title)
+        .fontWeight(.bold)
+
+      VStack(alignment: .leading, spacing: 15) {
+        if let task = task {
+          ForEach(task.tutorialSteps) { step in
+            HStack(spacing: 15) {
+              Image(systemName: step.icon)
+                .font(.title2)
+                .foregroundColor(.blue)
+                .frame(width: 30)
+
+              VStack(alignment: .leading, spacing: 4) {
+                Text(step.title)
+                  .font(.headline)
+                Text(step.description)
+                  .font(.body)
+                  .foregroundColor(.secondary)
+              }
+            }
+          }
+        }
+      }
+
+      Button(action: {
+        showInstructions = false
+      }) {
+        Text("Start Task")
+          .font(.title2)
+          .fontWeight(.medium)
+          .foregroundColor(.white)
+          .frame(maxWidth: .infinity)
+          .frame(height: 50)
+          .background(Color.blue)
+          .cornerRadius(10)
+      }
+      .padding(.top, 20)
+    }
+    .padding(.horizontal, 30)
+  }
+
   // MARK: - Computed Properties
   private var hasResults: Bool {
-    // Removed showError from here - only show results if we have actual content
     !transcription.isEmpty || predictionResult != nil
   }
 
-  // Update your resultsScrollView to not show errors:
   private var resultsScrollView: some View {
     VStack(spacing: 20) {
       if let result = predictionResult {
@@ -110,19 +162,6 @@ struct SpeechView: View {
             .fontWeight(.semibold)
             .foregroundColor(result.prediction == 1 ? .red : .green)
         }
-
-        // // Display additional info if available
-        // if let additionalInfo = result.additionalInfo {
-        //   ForEach(Array(additionalInfo.keys.sorted()), id: \.self) { key in
-        //     HStack {
-        //       Text("\(key.capitalized):")
-        //         .fontWeight(.medium)
-        //       Spacer()
-        //       Text("\(additionalInfo[key] ?? "N/A")")
-        //         .fontWeight(.semibold)
-        //     }
-        //   }
-        // }
       }
       .padding()
       .background(Color.green.opacity(0.1))
@@ -133,24 +172,16 @@ struct SpeechView: View {
 
   private var recordingControlsSection: some View {
     VStack(spacing: 20) {
-      // Microphone button
       microphoneButton
-
-      // Timer with minimum duration indication
       timerView
 
-      // Processing indicator
       if isProcessing {
         processingIndicator
       }
 
-      // API Status indicator
       apiStatusIndicator
-
-      // Submit button
       submitButton
 
-      // Done button (appears after analysis)
       if predictionResult != nil {
         doneButton
       }
@@ -184,7 +215,6 @@ struct SpeechView: View {
         .fontWeight(.medium)
         .foregroundColor(audioRecorder.isRecording ? .red : .primary)
 
-      // Show minimum duration indicator
       if audioRecorder.isRecording {
         let remainingTime = max(0, 30 - Int(recordingDuration))
         if remainingTime > 0 {
@@ -224,7 +254,6 @@ struct SpeechView: View {
   private var submitButton: some View {
     Button(action: {
       if audioRecorder.hasRecording && apiKeyValid {
-        // Check if recording meets minimum duration
         if recordingDuration < 30 && audioRecorder.hasRecording {
           showError = true
           errorMessage =
@@ -243,7 +272,6 @@ struct SpeechView: View {
           .fontWeight(.medium)
           .foregroundColor(.white)
 
-        // Show error message in button if there's an error
         if showError && !errorMessage.isEmpty {
           Text(errorMessage)
             .font(.caption)
@@ -267,7 +295,6 @@ struct SpeechView: View {
 
   private var doneButton: some View {
     Button(action: {
-      // Complete the task with the current speech score
       sessionManager.completeTask("speech", withScore: SpeechScore(probability: speechScore))
       currentView = .sessionChecklist
     }) {
@@ -284,7 +311,6 @@ struct SpeechView: View {
     .padding(.top, 10)
   }
 
-  // MARK: - Computed Properties
   private var buttonTitle: String {
     if !apiKeyValid {
       return "Skip Task"
@@ -297,7 +323,7 @@ struct SpeechView: View {
 
   private var buttonBackgroundColor: Color {
     if showError {
-      return Color.red  // Red background when there's an error
+      return Color.red
     }
     if !apiKeyValid {
       return Color.green
@@ -317,7 +343,7 @@ extension SpeechView {
   }
 
   private func requestSpeechPermission() {
-    AVAudioSession.sharedInstance().requestRecordPermission { granted in
+    AVAudioApplication.requestRecordPermission { granted in
       if !granted {
         DispatchQueue.main.async {
           self.errorMessage = "Microphone permission denied"
@@ -346,7 +372,6 @@ extension SpeechView {
 // MARK: - Recording Functions
 extension SpeechView {
   private func startRecording() {
-    // Reset states - Clear error when starting new recording
     recordingDuration = 0
     updateTimer()
     transcription = ""
@@ -355,10 +380,8 @@ extension SpeechView {
     errorMessage = ""
     showError = false
 
-    // Start recording
     audioRecorder.startRecording()
 
-    // Start timer
     timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
       recordingDuration += 1
       updateTimer()
@@ -370,7 +393,6 @@ extension SpeechView {
     timer = nil
     audioRecorder.stopRecording()
 
-    // Check minimum duration after stopping
     if recordingDuration < 30 {
       showError = true
       errorMessage = ""
@@ -393,7 +415,6 @@ extension SpeechView {
       return
     }
 
-    // Double-check minimum duration before processing
     guard recordingDuration >= 30 else {
       showError = true
       errorMessage = "Recording must be at least 30 seconds long"
@@ -401,10 +422,9 @@ extension SpeechView {
     }
 
     isProcessing = true
-    showError = false  // Clear any previous errors when starting processing
+    showError = false
     errorMessage = ""
 
-    // First transcribe the audio
     speechRecognizer.transcribe(audioURL: audioURL) { result in
       DispatchQueue.main.async {
         switch result {
@@ -433,7 +453,6 @@ extension SpeechView {
       return
     }
 
-    // Prepare data for API - each sentence with its own duration
     let sentenceData = utterances.map { utterance in
       [
         "sentence": utterance.text,
@@ -441,7 +460,6 @@ extension SpeechView {
       ]
     }
 
-    // Call API with individual sentences
     alzheimerAPI.predict(sentences: sentenceData) { result in
       DispatchQueue.main.async {
         self.isProcessing = false
@@ -449,14 +467,11 @@ extension SpeechView {
         switch result {
         case .success(let response):
           self.predictionResult = response
-          // Clear any errors on successful API response
           self.showError = false
           self.errorMessage = ""
-          // Extract probability/score from response if available
           if let probability = response.probability {
             self.speechScore = probability
           } else {
-            // Default scoring based on prediction
             self.speechScore = response.prediction == 1 ? 0.8 : 0.2
           }
         case .failure(let error):
@@ -465,7 +480,6 @@ extension SpeechView {
           self.speechScore = 0.0
         }
 
-        // Clean up the audio file after processing
         self.audioRecorder.deleteCurrentRecording()
       }
     }
@@ -492,7 +506,6 @@ struct APIResponse {
     self.prediction = dictionary["prediction"] as? Int
     self.probability = dictionary["probability"] as? Double
 
-    // Store any additional fields
     var info: [String: Any] = [:]
     for (key, value) in dictionary {
       if key != "prediction" && key != "probability" {
@@ -512,7 +525,7 @@ class AudioRecorder: NSObject, ObservableObject {
   var audioFileURL: URL?
 
   func requestPermission() {
-    AVAudioSession.sharedInstance().requestRecordPermission { _ in }
+    AVAudioApplication.requestRecordPermission { _ in }
   }
 
   func startRecording() {
@@ -623,24 +636,20 @@ class SpeechRecognizer: NSObject, ObservableObject {
         || trimmedSubstring.hasSuffix("?")
 
       let isLastSegment = index == segments.count - 1
-      let hasMinimumWords = wordCount >= 3  // Minimum words per sentence
+      let hasMinimumWords = wordCount >= 3
 
-      // End sentence if: punctuation found, last segment, or sentence is getting too long
       if (isEndOfSentence && hasMinimumWords) || isLastSegment || wordCount >= 15 {
         let sentenceEndTime = segment.timestamp + segment.duration
         let duration = sentenceEndTime - sentenceStartTime
 
-        // Only add sentences with meaningful duration and content
         let cleanSentence = currentSentence.trimmingCharacters(in: .whitespacesAndNewlines)
         if !cleanSentence.isEmpty && duration > 0.5 {
           utterances.append(Utterance(text: cleanSentence, duration: duration))
         }
 
-        // Reset for next sentence
         currentSentence = ""
         wordCount = 0
       } else {
-        // Add space between words if not at punctuation
         if !trimmedSubstring.hasSuffix(",") && !trimmedSubstring.hasSuffix(".")
           && !trimmedSubstring.hasSuffix("!") && !trimmedSubstring.hasSuffix("?")
         {
@@ -651,7 +660,6 @@ class SpeechRecognizer: NSObject, ObservableObject {
       }
     }
 
-    // Handle any remaining sentence
     if !currentSentence.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !segments.isEmpty
     {
       let duration = segments.last!.timestamp + segments.last!.duration - sentenceStartTime
@@ -664,7 +672,6 @@ class SpeechRecognizer: NSObject, ObservableObject {
       }
     }
 
-    // Fallback: if no sentences were created, create one from the full transcription
     if utterances.isEmpty && !segments.isEmpty {
       let totalDuration =
         segments.last!.timestamp + segments.last!.duration - segments.first!.timestamp
@@ -695,7 +702,6 @@ class AlzheimerAPI: ObservableObject {
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-    // Updated payload structure for individual sentences
     let payload = ["sentences": sentences]
 
     do {
@@ -734,5 +740,13 @@ class AlzheimerAPI: ObservableObject {
         completion(.failure(error))
       }
     }.resume()
+  }
+}
+
+struct SpeechScore: TaskScore {
+  let probability: Double
+
+  func convertToMMSE() -> Int {
+    return 0
   }
 }
